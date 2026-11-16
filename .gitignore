@@ -1,0 +1,14 @@
+# 依赖与构建产物
+node_modules/
+pnpm-lock.yaml
+
+# 运行时数据，绝不能提交
+*.log
+.DS_Store
+Thumbs.db
+
+# 打包/临时
+*.tgz
+*.zip
+dist/
+tmp/

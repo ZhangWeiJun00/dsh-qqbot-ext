@@ -1,0 +1,18 @@
+# dsh-qqbot-ext bundle 补丁：三个组件行，全部指向本包模块。
+# 由 package.json 的 dsh.bundle.patch 自动挂载成 insert 层。
+#
+# 千万别把这里的 insert 块复制进 profile 的 cordis.patch.yml ——
+# 重复 entry id 会把 Settings 保存搞坏（dsh-web issue #470）。
+# 想在 profile 里停用某个组件，用顶层覆盖行，例如：
+#   - id: dsh-qqbot-ext-routes
+#     disabled: true
+- insert:
+    # 宿主层：全局工具 / 服务（features/host/*，任何预设都生效）
+    - id: dsh-qqbot-ext
+      name: 'dsh-qqbot-ext'
+    # Web 路由（features/routes/*），webServer 就绪才激活
+    - id: dsh-qqbot-ext-routes
+      name: 'dsh-qqbot-ext/routes'
+    # 注册 qqbot-ext Agent 预设（组件清单见 lib/preset-plugins.js）
+    - id: dsh-qqbot-ext-preset
+      name: 'dsh-qqbot-ext/preset'
