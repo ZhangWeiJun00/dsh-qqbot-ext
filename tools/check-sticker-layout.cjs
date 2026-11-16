@@ -1,0 +1,10 @@
+const fs=require('fs'),vm=require('vm'),assert=require('assert');
+let Section; const slots=[];let cursor=0;
+const React={createElement:(type,props,...children)=>({type,props:props||{},children}),useState:init=>{const i=cursor++;if(!(i in slots))slots[i]=typeof init==='function'?init():init;return [slots[i],v=>slots[i]=typeof v==='function'?v(slots[i]):v]},useEffect:()=>{}};
+const context={window:{__ModuleLoader__:{load:({factory})=>factory(()=>React)}},capture:v=>Section=v};
+let source=fs.readFileSync('dsh-qqbot-ext/client.js','utf8').replace(/    return \{\r?\n      \/\/ 只声明 slots/,'    capture(StickerLibrarySection);\n    return {\n      // 只声明 slots');vm.runInNewContext(source,context);
+assert.equal(typeof Section,'function');
+const data={config:{enabled:true,collectMode:'auto'},defaults:{},libraryDir:'D:/test'};
+const render=()=>{cursor=0;return Section({data,setData:()=>{}})};
+let tree=render();let panels=tree.children.filter(x=>x?.props?.role==='tabpanel');assert.equal(panels.length,4);assert.equal(panels.filter(x=>!x.props.hidden).length,1);
+const nav=tree.children[0].children[0];nav[2].props.onClick();tree=render();panels=tree.children.filter(x=>x?.props?.role==='tabpanel');assert.equal(panels.find(x=>!x.props.hidden).props.id,'qbe-panel-send');assert.equal(slots[1].enabled,true);console.log('PASS four tabs, one visible panel, tab switch retains form state');

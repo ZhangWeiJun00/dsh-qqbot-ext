@@ -6,6 +6,7 @@
 // 调用通道与官方 qqbot_describe_image 一致：llm 服务 + attachments.saveImage。
 // 视觉模型由用户自己在配置页填 provider/model，没填就完全不跑（不产生任何调用）。
 import { readFile } from 'node:fs/promises'
+import { collectVisionText } from '../../lib/vision-stream.js'
 import { judgeReady } from '../../lib/config.js'
 
 const DEFAULT_PROMPT = '你在 QQ 群里混。看这张表情包，判断你自己想不想把它存进自己的表情库，以后用来回群友的话。想就回 KEEP，不想就回 DROP，然后另起一行用一句口语说理由。'
@@ -70,7 +71,6 @@ export function createJudge({ ctx, collector, getConfig, logger }) {
           { type: 'text', text: prompt },
         ],
       }
-      let text = ''
       const stream = llm.stream({
         provider: config.judgeProvider,
         model: config.judgeModel,
@@ -78,11 +78,7 @@ export function createJudge({ ctx, collector, getConfig, logger }) {
         maxTokens: config.judgeMaxTokens,
         signal: controller.signal,
       })
-      for await (const chunk of stream) {
-        if (typeof chunk?.text === 'string') text += chunk.text
-        else if (chunk?.type === 'text' && typeof chunk.text === 'string') text += chunk.text
-      }
-      return text
+      return await collectVisionText(stream)
     } finally {
       clearTimeout(timer)
     }

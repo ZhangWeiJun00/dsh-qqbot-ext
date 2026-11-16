@@ -30,6 +30,14 @@ export const CONFIG_DEFAULTS = {
   judgePrompt: '',
   judgeMaxTokens: 200,
   judgeTimeoutMs: 60000,
+  indexEnabled: false,
+  indexProvider: '',
+  indexModel: '',
+  indexPrompt: '',
+  indexMaxTokens: 1200,
+  indexTimeoutMs: 60000,
+  sameStickerCooldownSeconds: 600,
+  stickerSendIntervalSeconds: 15,
 }
 
 /** 收集模式的合法取值。 */
@@ -105,7 +113,28 @@ export function normalizeConfig(patch, base) {
   }
   next.judgeMaxTokens = toInt(input.judgeMaxTokens, current.judgeMaxTokens, 'judgeMaxTokens', 16, 4000)
   next.judgeTimeoutMs = toInt(input.judgeTimeoutMs, current.judgeTimeoutMs, 'judgeTimeoutMs', 1000, 600000)
+  if (input.indexEnabled !== undefined) {
+    if (typeof input.indexEnabled !== 'boolean') throw new Error('indexEnabled 必须是布尔值')
+    next.indexEnabled = input.indexEnabled
+  }
+  for (const key of ['indexProvider', 'indexModel', 'indexPrompt']) {
+    if (input[key] === undefined) continue
+    if (typeof input[key] !== 'string' || input[key].length > (key === 'indexPrompt' ? 4000 : 200)) throw new Error(`${key} 格式或长度无效`)
+    next[key] = input[key]
+  }
+  next.indexMaxTokens = toInt(input.indexMaxTokens, current.indexMaxTokens, 'indexMaxTokens', 128, 8000)
+  next.indexTimeoutMs = toInt(input.indexTimeoutMs, current.indexTimeoutMs, 'indexTimeoutMs', 1000, 600000)
+  next.sameStickerCooldownSeconds = toInt(input.sameStickerCooldownSeconds, current.sameStickerCooldownSeconds, 'sameStickerCooldownSeconds', 0, 2592000)
+  next.stickerSendIntervalSeconds = toInt(input.stickerSendIntervalSeconds, current.stickerSendIntervalSeconds, 'stickerSendIntervalSeconds', 0, 86400)
   return next
+}
+
+export function indexModelOf(config) {
+  return { provider: String(config.indexProvider || config.judgeProvider || '').trim(), model: String(config.indexModel || config.judgeModel || '').trim() }
+}
+export function indexReady(config) {
+  const { provider, model } = indexModelOf(config)
+  return config.indexEnabled === true && provider !== '' && model !== ''
 }
 
 /**
@@ -114,6 +143,7 @@ export function normalizeConfig(patch, base) {
  * 一份写坏的配置会让 readConfig 整个退回默认值，把用户的其它设置也一起弄丢。
  */
 export function assertWritable(next) {
+  if (next.indexEnabled && !indexReady(next)) throw new Error('开启图片理解前，先选择图片理解模型或配置可复用的视觉模型')
   // 开了自动判断却没填 provider/model：与其静默失败，不如直接报错让人看见。
   if (next.judgeEnabled === true && next.collectMode === 'curated'
     && (String(next.judgeProvider ?? '').trim() === '' || String(next.judgeModel ?? '').trim() === '')) {

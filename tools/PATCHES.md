@@ -1,5 +1,14 @@
 # 上游补丁说明
 
+## 2026-11-16：图片理解、检索与发送冷却
+
+受限发送服务新增 `conversationKey(agent)`，从 SessionManager 返回稳定的 QQ `sessionKey`，用于隔离各会话的发送冷却。不开放任意目标发送；更新补丁并重启 DSH 后生效。
+
+扩展提供后台图意索引、按情绪和场景检索、人工修正、可配置同图冷却和连续发送间隔。仅解析视觉流最终正文，排除 reasoning；token 截断和 provider 错误明确报错。配置页拆为收集、图片理解、发送、图库管理四个页签。
+
+验证：`node tools/test-sticker-search-send.mjs`（20 项隔离检查，不写真实配置和图库）、`node tools/check-sticker-layout.cjs`（页签切换保持表单）。
+
+
 本仓库只包含一个上游补丁：给官方 `@tencent-connect/dsh-qqbot` 加表情包收集的入站接缝。
 其余功能全部在 `dsh-qqbot-ext/` 扩展里实现，不需要改上游。
 

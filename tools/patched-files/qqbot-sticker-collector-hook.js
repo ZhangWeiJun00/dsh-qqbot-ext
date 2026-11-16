@@ -7,6 +7,12 @@
 // The library directory follows the extension's own config.json so a user-moved
 // library keeps working without another upstream edit.
 ctx.provide('qqbotExtStickerSender', {
+    conversationKey(agent) {
+        const entry = manager.findByAgent(agent);
+        if (!entry?.replyTarget) throw new Error('qqbotExtStickerSender: 无法确定当前 QQ 会话目标');
+        // Use the manager's stable session key, including QQ scope/peer.
+        return entry.sessionKey;
+    },
     async send(agent, filename) {
         if (typeof filename !== 'string' || !/^[a-f0-9]{40}\.(png|jpe?g|gif|webp)$/.test(filename)) {
             throw new Error('qqbotExtStickerSender: 非法图库文件名');

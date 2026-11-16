@@ -168,6 +168,7 @@ export function register(ctx) {
       await writeFile(join(library, filename), bytes)
       known.add(filename)
       stats.collected += 1
+      try { ctx.emit?.('qqbot-ext/sticker-collected', { filename }) } catch { /* optional listener */ }
       logger.info?.(`[dsh-qqbot-ext] 表情包已收集：${payload.stickerName || '未知表情'} → ${filename} (${dimensions.width}×${dimensions.height})`)
     } catch (error) {
       stats.skipped += 1
@@ -223,6 +224,7 @@ export function register(ctx) {
     known.add(filename)
     stats.collected += 1
     stats.approved += 1
+    try { ctx.emit?.('qqbot-ext/sticker-collected', { filename }) } catch { /* optional listener */ }
     return { filename, duplicate: false }
   }
 

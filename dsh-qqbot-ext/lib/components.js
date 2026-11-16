@@ -2,6 +2,7 @@
 // 新加功能时在这里补一行，页面自动多一个组件页。
 export const TOOL_INFO = {
   qq_list_stickers: '列出图库里的表情包（文件名、格式、大小）。',
+  qq_search_stickers: '按图中文字、情绪和使用场景查找表情，返回图意与当前会话剩余冷却。',
   qq_send_sticker: '把图库里某张表情发到当前 QQ 会话。',
   qq_sticker_status: '看自动收集开关、收集模式、图库张数和本次累计统计。',
   qq_sticker_pending: '列出暂存区里还没判断过、等你看图决定收不收的表情。',
@@ -18,7 +19,7 @@ export const COMPONENTS = [
     summary: '收集别人发的表情包，可全收，也可先让我看过再决定；设置存放位置和过滤条件。',
     editable: true,
     tools: [
-      'qq_list_stickers', 'qq_send_sticker', 'qq_sticker_status',
+      'qq_list_stickers', 'qq_search_stickers', 'qq_send_sticker', 'qq_sticker_status',
       'qq_sticker_pending', 'qq_sticker_keep', 'qq_sticker_drop',
     ],
   },

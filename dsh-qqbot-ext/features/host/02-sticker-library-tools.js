@@ -1,27 +1,37 @@
 // Personal QQ sticker library browse and send tools.
 // 图库目录由 lib/config.js 决定（Web 配置页可改）。
-import { readdir, stat } from 'node:fs/promises'
-import { extname, join } from 'node:path'
 import { libraryDirOf, readConfig } from '../../lib/config.js'
+import { listFiles as readLibrary, readStore, storePath, rankStickers } from '../../lib/sticker-store.js'
+import { createSendGuard } from '../../lib/sticker-cooldown.js'
 
 const VALID_NAME = /^[a-f0-9]{40}\.(png|jpe?g|gif|webp)$/i
 
-async function listFiles(library) {
-  const names = await readdir(library).catch(() => [])
-  const rows = []
-  for (const filename of names) {
-    if (!VALID_NAME.test(filename)) continue
-    try {
-      const info = await stat(join(library, filename))
-      if (info.isFile()) rows.push({ filename, bytes: info.size, ext: extname(filename).slice(1) })
-    } catch {
-      // File might be removed during listing.
-    }
-  }
-  return rows.sort((a, b) => a.filename.localeCompare(b.filename))
-}
+const listFiles = readLibrary
 
 export function register(ctx) {
+  const guard = createSendGuard()
+  const senderOf = () => { try { return ctx.get('qqbotExtStickerSender') } catch { return undefined } }
+  ctx.tools.register({
+    name: 'qq_search_stickers',
+    description: '按情绪、图中文字或场景搜索表情。接梗或表达情绪时可主动搜索；根据上下文和人设决定是否发送，没有合适的不要硬发，不用文件名猜图意。',
+    parameters: { type:'object', properties:{query:{type:'string',description:'情绪、关键词和场景，例如：炸毛 不服 被调侃后玩笑回怼'},limit:{type:'integer'}},required:['query'],additionalProperties:false },
+    isConcurrencySafe:()=>true,
+    output: {schema:{type:'object',additionalProperties:false,properties:{stickers:{type:'array',items:{type:'object',additionalProperties:true}},unindexed:{type:'integer'},note:{type:'string'}},required:['stickers','unindexed','note']},render:(_args,value)=>[{type:'text',text:JSON.stringify(value)}]},
+    async execute(args,exec) {
+      const config=await readConfig(), library=libraryDirOf(config)
+      const rows=await listFiles(library), data=await readStore(storePath(library,'index'))
+      const candidates=rows.filter(row=>data[row.filename]).map(row=>({filename:row.filename,...data[row.filename]}))
+      const ranked=rankStickers(candidates,args.query)
+      const sender=senderOf()
+      let key
+      try { key=sender?.conversationKey?.(exec?.agent) } catch { /* outside QQ */ }
+      const limit=Number.isFinite(Number(args.limit)) ? Math.max(1,Math.min(10,Math.trunc(Number(args.limit)))) : 5
+      const results=[]
+      for (const item of ranked) results.push({...item,...(key ? await guard.availability(library,key,item.filename,config) : {cooldownSeconds:null})})
+      results.sort((a,b)=>(a.cooldownSeconds > 0)-(b.cooldownSeconds > 0) || b.score-a.score)
+      return {stickers:results.slice(0,limit),unindexed:rows.length-candidates.length,note:key ? '根据图意、avoid 和上下文挑选；冷却中的不要发；无匹配就用文字或不回应。' : '当前无法确定 QQ 会话，冷却未知；索引为空时先到配置页启用图片理解。'}
+    },
+  })
   ctx.tools.register({
     name: 'qq_list_stickers',
     description: '列出自动收集进个人图库的 QQ 表情包图片。',
@@ -95,7 +105,7 @@ export function register(ctx) {
 
   ctx.tools.register({
     name: 'qq_send_sticker',
-    description: '将自动收集到个人图库中的 QQ 表情包发送到当前会话。先用 qq_list_stickers 查看文件名。',
+    description: '将自动收集到个人图库中的 QQ 表情包发送到当前会话。先用 qq_search_stickers 按语境选图；必须理解图意并适合当前聊天。受可配置的同图冷却和连续发送间隔限制。',
     parameters: {
       type: 'object',
       properties: { filename: { type: 'string', description: 'qq_list_stickers 返回的完整文件名' } },
@@ -117,7 +127,15 @@ export function register(ctx) {
       let sender
       try { sender = ctx.get('qqbotExtStickerSender') } catch { sender = undefined }
       if (typeof sender?.send !== 'function') throw new Error('官方 QQ 图片发送服务不可用')
-      const result = await sender.send(exec?.agent, filename)
+      if (typeof sender.conversationKey !== 'function') throw new Error('发送接缝需要更新并重启 DSH，暂时无法校验会话冷却')
+      const key = sender.conversationKey(exec?.agent)
+      if (typeof key !== 'string' || !key) throw new Error('无法确定当前 QQ 会话')
+      const library = libraryDirOf(await readConfig())
+      const result = await guard.send({library, key, filename, getConfig:async () => {
+        const live=await readConfig()
+        if (libraryDirOf(live)!==library) throw new Error('图库位置已变更，请重新搜索')
+        return live
+      }, deliver:()=>sender.send(exec?.agent,filename)})
       return { filename, ...(result?.message?.id ? { messageId: String(result.message.id) } : {}) }
     },
   })

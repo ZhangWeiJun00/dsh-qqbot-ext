@@ -37,6 +37,19 @@ dsh-qqbot-ext/
     └── routes/03-open-folder.js    # POST /qqbot-ext/open-folder（在文件管理器里打开图库）
 ```
 
+## 按聊天语境使用表情（图片理解与检索）
+
+设置页新增独立的「图片理解」开关和模型，默认关闭，避免未经配置调用模型。provider/model 留空时分别沿用后台判断模型。启用并保存后，启动、收图、采纳暂存图和配置变化都会触发串行补齐缺失索引；失败保留原图，管理区可重试。识别提示可编辑，输出包含图中文字、画面含义、情绪、适用/不适用场景和置信度。GIF 当前传原图给模型，未抽取多帧，提示明确要求说明静态识别限制。
+
+`qq_search_stickers({query, limit})` 使用中文分词与二字片段，在 OCR、情绪、场景和画面描述上加权检索，默认返回 5 张；无匹配返回空，不随机选图。返回描述与当前会话剩余冷却；模型根据人设和上下文决定是否调用 `qq_send_sticker`。扩展预设增加了相应提示，其他预设也可通过全局工具描述发现检索能力。
+
+- `sameStickerCooldownSeconds`：同一会话同图冷却，默认 600 秒，0 关闭。
+- `stickerSendIntervalSeconds`：同一会话任意表情的连续发送间隔，默认 15 秒，0 关闭。
+- 两项保存立即生效；发送前重查，串行防止并发重复，QQ 返回消息 ID 后才记录。按 QQ 会话目标 sessionKey 隔离，同一群或私聊切新 DSH 会话仍保留冷却；使用记录落盘，重启保留。
+- 索引与使用记录存在扩展配置目录、按图库路径区分，不往图库里放其他文件。人工修正不会被后台识别覆盖；管理区支持编辑 JSON、补齐、刷新和重试非人工描述。
+
+发送能力需要最新受限接缝，运行 `node tools/apply-qqbot-sticker-collector-patch.mjs` 后重启 DSH。源码改动需同步安装目录；单独修改设置不需要重启。验证：`node tools/test-sticker-search-send.mjs`，测试复制模块到临时目录，完全不写真实配置及图库。
+
 ## 安装（一次性）
 
 1. 找到你的 DSH profile 目录（默认 `~/.dsh/profiles/<名字>`，例如 `~/.dsh/profiles/desktop`），

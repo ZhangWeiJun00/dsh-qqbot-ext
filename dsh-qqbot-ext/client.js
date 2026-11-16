@@ -7,6 +7,13 @@ window.__ModuleLoader__.load({
     const API_PATH = '/qqbot-ext/config'
     const VISION_PATH = '/qqbot-ext/vision-models'
     const OPEN_FOLDER_PATH = '/qqbot-ext/open-folder'
+    const STICKER_INDEX_PATH = '/qqbot-ext/sticker-index'
+    const INDEX_DEFAULTS = {
+      indexEnabled: false, indexProvider: '', indexModel: '', indexPrompt: '',
+      indexMaxTokens: 1200, indexTimeoutMs: 60000,
+      sameStickerCooldownSeconds: 600, stickerSendIntervalSeconds: 15,
+    }
+    const withIndexDefaults = (config) => config == null ? null : ({ ...INDEX_DEFAULTS, ...config })
     const STYLE_ID = 'qqbot-ext-panel-styles'
     const NS = 'dsh-qqbot-ext'
     const PANEL_ID = 'qqbot-ext'
@@ -39,6 +46,19 @@ window.__ModuleLoader__.load({
         const style = document.createElement('style')
         style.id = STYLE_ID
         style.textContent = `
+
+.qbe-configPanel[hidden] { display: none; }
+.qbe-configTabs { position: sticky; top: 0; z-index: 2; padding: 10px 0;
+  background: var(--dsw-alias-bg-layer-3, #202024); }
+.qbe-configPanel { padding-bottom: 16px; }
+.qbe-configPanel > .qbe-group { border-top: 0; padding-top: 8px; }
+.qbe-advanced { margin: 12px 0; border: 0.5px solid var(--dsw-alias-border-l2); border-radius: 8px; padding: 10px 12px; }
+.qbe-advanced > summary { cursor: pointer; font-size: 13px; font-weight: 500; padding: 3px 0; }
+.qbe-fieldGrid { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); column-gap: 20px; }
+.qbe-fieldGrid > .qbe-field { border-top: 0; }
+.qbe-form > .qbe-footer { position: sticky; bottom: 0; z-index: 3; padding: 12px 0;
+  background: var(--dsw-alias-bg-layer-3, #202024); }
+@media (max-width: 600px) { .qbe-fieldGrid { grid-template-columns: 1fr; } .qbe-configTabs { gap: 2px; } .qbe-configTabs .qbe-tab { padding: 4px 8px; } }
 .qbe-root { display: flex; flex-direction: column; min-width: 0; gap: 16px; }
 .qbe-page { height: 100%; min-height: 0; overflow: auto; box-sizing: border-box;
   padding: 24px clamp(16px, 4vw, 48px) 32px; color: var(--dsw-alias-label-primary); }
@@ -256,7 +276,10 @@ window.__ModuleLoader__.load({
      * 视觉模型选择：自动探测宿主已注册的 provider / 能看图的模型。
      * 探测失败或该 provider 没广告模型时退回手填，功能不至于不可用。
      */
-    function VisionModelPicker({ form, defaults, disabled, patch, resetTo }) {
+    function VisionModelPicker({ form, defaults, disabled, patch, resetTo, prefix = 'judge' }) {
+      const providerKey = `${prefix}Provider`
+      const modelKey = `${prefix}Model`
+      const label = prefix === 'index' ? '索引视觉模型' : '视觉模型'
       const [catalog, setCatalog] = React.useState(null)
       const [note, setNote] = React.useState(null)
 
@@ -278,25 +301,25 @@ window.__ModuleLoader__.load({
       React.useEffect(() => { load() }, [])
 
       const providers = Array.isArray(catalog?.providers) ? catalog.providers : []
-      const providerId = form.judgeProvider ?? ''
+      const providerId = form[providerKey] ?? ''
       const current = providers.find((item) => item.id === providerId)
       const candidates = (current?.models ?? []).filter((model) => model.vision === true)
-      const allVision = providers.flatMap((item) => item.models.filter((m) => m.vision === true))
+      const allVision = providers.flatMap((item) => (item.models ?? []).filter((m) => m.vision === true))
       const loading = catalog === null
       const noVision = catalog !== null && allVision.length === 0
 
       const pickProvider = (event) => {
         const next = event.currentTarget.value
-        patch('judgeProvider', next)
+        patch(providerKey, next)
         // 换 provider 时原 model 多半不再适用，自动挑第一个能看图的
         const target = providers.find((item) => item.id === next)
-        const firstVision = target?.models.find((model) => model.vision === true)
-        patch('judgeModel', firstVision?.id ?? '')
+        const firstVision = target?.models?.find((model) => model.vision === true)
+        patch(modelKey, firstVision?.id ?? '')
       }
 
       return h('div', { className: 'qbe-field' },
         h('div', { className: 'qbe-head' },
-          h('span', { className: 'qbe-label' }, '视觉模型'),
+          h('span', { className: 'qbe-label' }, label),
           h('button', {
             type: 'button', className: 'qbe-mini', disabled: disabled === true,
             title: '重新读取宿主已注册的 provider 与模型',
@@ -306,46 +329,44 @@ window.__ModuleLoader__.load({
           ? h('div', { className: 'qbe-pathRow' },
             h('select', {
               className: 'qbe-input qbe-select', value: providerId, disabled: disabled === true,
-              'aria-label': '视觉模型 provider', onChange: pickProvider,
+              'aria-label': `${label} provider`, onChange: pickProvider,
             },
             h('option', { value: '' }, '— 选择 provider —'),
             providers.map((item) => h('option', { key: item.id, value: item.id }, item.id))),
             h('select', {
-              className: 'qbe-input qbe-select', value: form.judgeModel ?? '',
-              disabled: disabled === true || providerId === '',
-              'aria-label': '视觉模型 model', onChange: (event) => patch('judgeModel', event.currentTarget.value),
+              className: 'qbe-input qbe-select', value: form[modelKey] ?? '',
+              disabled: disabled === true,
+              'aria-label': `${label} model`, onChange: (event) => patch(modelKey, event.currentTarget.value),
             },
             h('option', { value: '' }, '— 选择模型 —'),
             candidates.map((model) => h('option', { key: model.id, value: model.id },
               model.name === model.id ? model.id : `${model.name}（${model.id}）`))))
           : null,
         note === null ? null : h('p', { className: 'qbe-hint qbe-hint--error' }, `⚠️ ${note}`),
-        (providers.length === 0 || (providerId !== '' && candidates.length === 0))
-          ? h('div', { className: 'qbe-pathRow' },
+        h('div', { className: 'qbe-pathRow' },
             h('input', {
               className: 'qbe-input', value: providerId, spellCheck: false, disabled: disabled === true,
-              placeholder: '手动填 provider，例如 easy-cliproxyapi',
-              'aria-label': '视觉模型 provider（手填）',
-              onChange: (event) => patch('judgeProvider', event.currentTarget.value),
+              placeholder: prefix === 'index' ? `留空沿用判断 provider：${form.judgeProvider || '未设置'}` : '手动填 provider，例如 easy-cliproxyapi',
+              'aria-label': `${label} provider（手填）`,
+              onChange: (event) => patch(providerKey, event.currentTarget.value),
             }),
             h('input', {
-              className: 'qbe-input', value: form.judgeModel ?? '', spellCheck: false, disabled: disabled === true,
-              placeholder: '手动填能看图的 model',
-              'aria-label': '视觉模型 model（手填）',
-              onChange: (event) => patch('judgeModel', event.currentTarget.value),
-            }))
-          : null,
+              className: 'qbe-input', value: form[modelKey] ?? '', spellCheck: false, disabled: disabled === true,
+              placeholder: prefix === 'index' ? `留空沿用判断 model：${form.judgeModel || '未设置'}` : '手动填能看图的 model',
+              'aria-label': `${label} model（手填）`,
+              onChange: (event) => patch(modelKey, event.currentTarget.value),
+            })),
         h('p', { className: 'qbe-hint' }, loading
           ? '正在从宿主读取已注册的模型…'
           : noVision
             ? '没探测到声明了图片输入的模型。在 settings 里补上 input: [text, image] 后再点「重新检测」，也可以直接手填。'
-            : `不支持看图的模型已隐藏。当前：${form.judgeProvider || '—'} / ${form.judgeModel || '—'}`),
+            : `不支持看图的模型已隐藏。当前：${form[providerKey] || (prefix === 'index' ? form.judgeProvider : '') || '—'} / ${form[modelKey] || (prefix === 'index' ? form.judgeModel : '') || '—'}`),
         h('div', { className: 'qbe-head' },
           h('span', { className: 'qbe-label qbe-label--sub' }, '不选的话也可以手动指定'),
           h(ResetButton, {
-            isDefault: `${form.judgeProvider ?? ''}|${form.judgeModel ?? ''}` === `${defaults.judgeProvider ?? ''}|${defaults.judgeModel ?? ''}`,
-            onReset: () => { resetTo('judgeProvider')(); resetTo('judgeModel')() },
-            disabled: disabled, label: '视觉模型',
+            isDefault: `${form[providerKey] ?? ''}|${form[modelKey] ?? ''}` === `${defaults[providerKey] ?? ''}|${defaults[modelKey] ?? ''}`,
+            onReset: () => { resetTo(providerKey)(); resetTo(modelKey)() },
+            disabled: disabled, label,
           })))
     }
 
@@ -408,18 +429,113 @@ window.__ModuleLoader__.load({
       return { available: false, tried: tried.join('；') }
     }
 
+    /** 图库索引管理与配置保存相互独立。 */
+    function StickerIndexManager({ libraryDir }) {
+      const [items, setItems] = React.useState([])
+      const [status, setStatus] = React.useState(null)
+      const [selected, setSelected] = React.useState('')
+      const [draft, setDraft] = React.useState('')
+      const [busy, setBusy] = React.useState(false)
+      const [note, setNote] = React.useState(null)
+      const metadataOf = (item) => Object.fromEntries(
+        ['text', 'description', 'emotions', 'scenes', 'avoid', 'confidence'].map((key) =>
+          [key, item[key] ?? (['emotions', 'scenes', 'avoid'].includes(key) ? [] : key === 'confidence' ? 0 : '')]))
+      const selectItem = (filename, list = items) => {
+        setSelected(filename)
+        const item = list.find((entry) => entry.filename === filename)
+        setDraft(item ? JSON.stringify(metadataOf(item), null, 2) : '')
+      }
+      const request = async (body) => {
+        const res = await fetch(STICKER_INDEX_PATH, body === undefined
+          ? { cache: 'no-store', headers: { accept: 'application/json' } }
+          : { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify(body) })
+        const result = await res.json().catch(() => ({}))
+        if (!res.ok || result.ok !== true) throw new Error(result.error ?? `索引请求失败（HTTP ${res.status}）`)
+        return result
+      }
+      const refresh = async (filename) => {
+        const result = await request()
+        const list = Array.isArray(result.items) ? result.items : []
+        setItems(list)
+        setStatus(result.status ?? null)
+        selectItem(list.some((item) => item.filename === filename) ? filename : list[0]?.filename ?? '', list)
+      }
+      const perform = async (action) => {
+        if (busy) return
+        setBusy(true)
+        setNote(null)
+        try {
+          let metadata
+          if (action === 'update') {
+            metadata = JSON.parse(draft)
+            if (!metadata || Array.isArray(metadata) || typeof metadata !== 'object') throw new Error('元数据必须是 JSON 对象')
+            for (const key of ['text', 'description']) {
+              if (typeof metadata[key] !== 'string') throw new Error(`${key} 必须是字符串`)
+            }
+            for (const key of ['emotions', 'scenes', 'avoid']) {
+              if (!Array.isArray(metadata[key]) || metadata[key].some((value) => typeof value !== 'string')) throw new Error(`${key} 必须是字符串数组`)
+            }
+            if (typeof metadata.confidence !== 'number' || !Number.isFinite(metadata.confidence) || metadata.confidence < 0 || metadata.confidence > 1) throw new Error('confidence 必须是 0 到 1 的数字')
+            metadata = metadataOf(metadata)
+          }
+          if (action) await request({ action, ...(action === 'run' ? {} : { filename: selected }), ...(metadata ? { metadata } : {}) })
+          await refresh(selected)
+          setNote({ ok: true, message: action === 'update' ? '修正已保存' : action === 'retry' ? '已请求重新索引；可刷新查看进度' : action === 'run' ? '已请求补齐缺失索引；可刷新查看进度' : '列表已刷新' })
+        } catch (error) {
+          setNote({ ok: false, message: error instanceof Error ? error.message : String(error) })
+        } finally { setBusy(false) }
+      }
+      React.useEffect(() => {
+        let stopped = false
+        setBusy(true)
+        setNote(null)
+        request().then((result) => {
+          if (stopped) return
+          const list = Array.isArray(result.items) ? result.items : []
+          setItems(list)
+          setStatus(result.status ?? null)
+          selectItem(list[0]?.filename ?? '', list)
+        }).catch((error) => {
+          if (!stopped) setNote({ ok: false, message: error instanceof Error ? error.message : String(error) })
+        }).finally(() => { if (!stopped) setBusy(false) })
+        return () => { stopped = true }
+      }, [libraryDir])
+      return h('div', { className: 'qbe-group' },
+        h('div', { className: 'qbe-groupHead' }, '图库索引管理'),
+        h('p', { className: 'qbe-hint' }, '操作使用已保存的配置。刷新或切换图片会重新载入元数据，请先保存修正。'),
+        h('div', { className: 'qbe-pathRow' },
+          h('button', { type: 'button', className: 'qbe-mini', disabled: busy, onClick: () => perform() }, busy ? '处理中…' : '刷新列表'),
+          h('button', { type: 'button', className: 'qbe-mini', disabled: busy, onClick: () => perform('run') }, '补齐缺失索引')),
+        status === null ? null : h('pre', { className: 'qbe-hint', style: { whiteSpace: 'pre-wrap' } }, typeof status === 'string' ? status : JSON.stringify(status, null, 2)),
+        note === null ? null : h('p', { role: note.ok ? 'status' : 'alert', className: `qbe-hint${note.ok ? '' : ' qbe-hint--error'}` }, note.message),
+        h('label', { className: 'qbe-label', htmlFor: 'qbe-index-items' }, `图库图片（${items.length}）`),
+        h('select', { id: 'qbe-index-items', className: 'qbe-input', size: 8,
+          style: { height: 'auto', minHeight: '150px' }, value: selected, disabled: busy || items.length === 0,
+          onChange: (event) => { selectItem(event.currentTarget.value); setNote(null) } },
+          items.map((item) => h('option', { key: item.filename, value: item.filename }, `${item.filename}${item.manual ? ' · 人工修正' : ''}${item.description ? ` · ${item.description}` : ''}`))),
+        items.length === 0 ? h('p', { className: 'qbe-hint' }, '暂无图片，请刷新或检查图库目录。') : null,
+        h('label', { className: 'qbe-label', htmlFor: 'qbe-index-metadata' }, '所选图片元数据（JSON）'),
+        h('textarea', { id: 'qbe-index-metadata', className: 'qbe-input qbe-textarea', rows: 14,
+          style: { fontFamily: 'ui-monospace, monospace' }, value: draft, spellCheck: false,
+          disabled: busy || !selected, onChange: (event) => { setDraft(event.currentTarget.value); setNote(null) } }),
+        h('div', { className: 'qbe-pathRow' },
+          h('button', { type: 'button', className: 'qbe-mini', disabled: busy || !selected, onClick: () => perform('update') }, '保存修正'),
+          h('button', { type: 'button', className: 'qbe-mini', disabled: busy || !selected, onClick: () => perform('retry') }, '重新索引所选图片')))
+    }
+
     /** 表情包图库组件：唯一可编辑的组件。 */
     function StickerLibrarySection({ data, setData, getWorkspace }) {
-      const [initial, setInitial] = React.useState(data.config)
-      const [form, setForm] = React.useState(data.config)
+      const [initial, setInitial] = React.useState(() => withIndexDefaults(data.config))
+      const [form, setForm] = React.useState(() => withIndexDefaults(data.config))
       const [busy, setBusy] = React.useState(false)
       const [result, setResult] = React.useState(null)
       const [pickNote, setPickNote] = React.useState(null)
       const [opening, setOpening] = React.useState(false)
+      const [tab, setTab] = React.useState('collect')
 
       React.useEffect(() => {
-        setInitial(data.config)
-        setForm(data.config)
+        setInitial(withIndexDefaults(data.config))
+        setForm(withIndexDefaults(data.config))
       }, [data.config])
 
       const patch = (key, value) => {
@@ -438,8 +554,8 @@ window.__ModuleLoader__.load({
         }).then(async (res) => {
           const body = await res.json().catch(() => ({}))
           if (res.ok && body.ok === true) {
-            setInitial(body.config)
-            setForm(body.config)
+            setInitial(withIndexDefaults(body.config))
+            setForm(withIndexDefaults(body.config))
             setData((current) => current === null ? current : {
               ...current,
               config: body.config,
@@ -509,13 +625,20 @@ window.__ModuleLoader__.load({
 
       if (form === null) return h('div', { className: 'qbe-empty' }, '正在读取配置…')
       const dirty = JSON.stringify(form) !== JSON.stringify(initial)
-      const defaults = data.defaults ?? {}
+      const defaults = { ...INDEX_DEFAULTS, ...data.defaults }
       const resetTo = (key) => () => {
         if (defaults[key] === undefined) return
         patch(key, defaults[key])
       }
 
+      const sections = [['collect', '收集设置'], ['index', '图片理解'], ['send', '发送设置'], ['library', '图库管理']]
+      const panel = (id, ...children) => h('div', { key: id, id: `qbe-panel-${id}`, role: 'tabpanel', 'aria-labelledby': `qbe-tab-${id}`, hidden: tab !== id, className: 'qbe-configPanel' }, ...children)
       return h('form', { className: 'qbe-form', onSubmit: submit },
+        h('div', { className: 'qbe-tabs qbe-configTabs', role: 'tablist', 'aria-label': '图库设置分类' },
+          sections.map(([id, label]) => h('button', { key: id, id: `qbe-tab-${id}`, type: 'button', role: 'tab',
+            className: 'qbe-tab', 'aria-selected': tab === id, 'aria-controls': `qbe-panel-${id}`,
+            onClick: () => setTab(id) }, label))),
+        panel('collect',
         h('div', { className: 'qbe-field' },
           h('div', { className: 'qbe-head' },
             h('span', { className: 'qbe-label' }, '自动收集别人发的表情包'),
@@ -583,8 +706,8 @@ window.__ModuleLoader__.load({
           onChange: (v) => patch('pendingLimit', v), onReset: resetTo('pendingLimit'), disabled: busy,
           help: '只在「模型判断」模式下有用：暂存区满了丢最旧的，0 表示不留。',
         }),
-        h('div', { className: 'qbe-group' },
-          h('div', { className: 'qbe-groupHead' }, '后台自动判断（只在「模型判断」模式下生效）'),
+        h('details', { className: 'qbe-advanced' },
+          h('summary', null, '模型筛选设置（仅模型判断模式）'),
           h('div', { className: 'qbe-field' },
             h('div', { className: 'qbe-head' },
               h('span', { className: 'qbe-label' }, '开启后台自动判断'),
@@ -616,6 +739,8 @@ window.__ModuleLoader__.load({
             onChange: (v) => patch('judgeTimeoutMs', v), onReset: resetTo('judgeTimeoutMs'), disabled: busy,
             help: '单张图最多等这么久，超时就跳过、留在暂存区下次再判。',
           })),
+          h('details', { className: 'qbe-advanced' }, h('summary', null, '高级过滤设置'),
+            h('div', { className: 'qbe-fieldGrid' },
         h(NumberField, {
           label: '最小字节', value: form.minBytes, defaultValue: defaults.minBytes,
           onChange: (v) => patch('minBytes', v), onReset: resetTo('minBytes'), disabled: busy,
@@ -638,7 +763,39 @@ window.__ModuleLoader__.load({
           label: '最大长宽比', value: form.maxAspect, defaultValue: defaults.maxAspect,
           onChange: (v) => patch('maxAspect', v), onReset: resetTo('maxAspect'), disabled: busy,
           help: '2 表示长边最多是短边的两倍，太长的截图会被挡掉。',
-        }),
+        })))),
+        panel('index',
+        h('div', { className: 'qbe-group' },
+          h('div', { className: 'qbe-groupHead' }, '图片内容索引（全收与模型判断模式均可使用）'),
+          h('div', { className: 'qbe-field' },
+            h('div', { className: 'qbe-head' },
+              h('span', { className: 'qbe-label' }, '开启图片索引'),
+              h(ResetButton, { isDefault: form.indexEnabled === defaults.indexEnabled,
+                onReset: resetTo('indexEnabled'), disabled: busy, label: '图片索引' }),
+              h(Switch, { checked: form.indexEnabled === true, label: '图片索引', disabled: busy,
+                onChange: (value) => patch('indexEnabled', value) })),
+            h('p', { className: 'qbe-help' }, '为图库图片生成文字、描述和场景标签，独立于收集模式。默认关闭。')),
+          h(VisionModelPicker, { form, defaults, disabled: busy, patch, resetTo, prefix: 'index' }),
+          h('p', { className: 'qbe-hint' }, '索引 provider 与 model 分别留空时，沿用后台判断的对应配置。'),
+          h(TextAreaField, { label: '索引提示词', value: form.indexPrompt, defaultValue: defaults.indexPrompt,
+            onChange: (value) => patch('indexPrompt', value), onReset: resetTo('indexPrompt'), disabled: busy,
+            placeholder: '留空使用内置索引提示词' }),
+          h(NumberField, { label: '索引输出 token 上限', value: form.indexMaxTokens, defaultValue: defaults.indexMaxTokens,
+            onChange: (value) => patch('indexMaxTokens', value), onReset: resetTo('indexMaxTokens'), disabled: busy }),
+          h(NumberField, { label: '索引超时（毫秒）', value: form.indexTimeoutMs, defaultValue: defaults.indexTimeoutMs,
+            onChange: (value) => patch('indexTimeoutMs', value), onReset: resetTo('indexTimeoutMs'), disabled: busy }))),
+        panel('send',
+        h('div', { className: 'qbe-group' },
+          h('div', { className: 'qbe-groupHead' }, '表情发送冷却'),
+          h(NumberField, { label: '同一张表情冷却（秒）', value: form.sameStickerCooldownSeconds,
+            defaultValue: defaults.sameStickerCooldownSeconds, disabled: busy,
+            onChange: (value) => patch('sameStickerCooldownSeconds', value), onReset: resetTo('sameStickerCooldownSeconds'),
+            help: '默认 600 秒，0 表示关闭同图冷却。' }),
+          h(NumberField, { label: '表情发送间隔（秒）', value: form.stickerSendIntervalSeconds,
+            defaultValue: defaults.stickerSendIntervalSeconds, disabled: busy,
+            onChange: (value) => patch('stickerSendIntervalSeconds', value), onReset: resetTo('stickerSendIntervalSeconds'),
+            help: '默认 15 秒，0 表示关闭发送间隔限制。' }))),
+        panel('library', h(StickerIndexManager, { libraryDir: data.libraryDir })),
         h('div', { className: 'qbe-footer' },
           result !== null
             ? h('p', { className: `qbe-note${result.ok ? '' : ' qbe-note--error'}` }, (result.ok ? '' : '⚠️ ') + result.message)
