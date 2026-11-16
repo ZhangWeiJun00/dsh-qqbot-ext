@@ -38,17 +38,43 @@
 
 ## 安装
 
+### 一键安装（推荐）
+
 ```bash
-# 1. clone 到任意位置
-git clone <本仓库地址> dsh-qqbot-ext-repo
+git clone git@github.com:ZhangWeiJun00/dsh-qqbot-ext.git
+cd dsh-qqbot-ext
 
-# 2. 在 DSH profile 的 package.json 里加依赖和 bundle
-#    dependencies:      "dsh-qqbot-ext": "file:<你 clone 的路径>/dsh-qqbot-ext"
-#    dsh.profile.bundles: 加上 "dsh-qqbot-ext"
-
-# 3. 在 profile 目录安装并重启 DSH
-pnpm install
+node install.mjs --dry-run   # 先看看它会做什么
+node install.mjs             # 真正安装
 ```
+
+脚本会自动完成这些事：
+
+1. 找到你的 DSH profile 目录（扫 `~/.dsh/profiles/*`，多个时默认 desktop）
+2. 往 profile 的 `package.json` 加依赖和 bundle（改前备份为 `package.json.qqbot-ext-backup`）
+3. 在 profile 里跑 `pnpm install`
+4. 给上游 `dsh-qqbot` 打表情收集补丁
+
+之后重启 DSH 即可。
+
+常用参数：
+
+| 参数 | 作用 |
+| --- | --- |
+| `--profile <目录>` | 指定 profile，不自动探测 |
+| `--no-patch` | 不打上游补丁（图库能发不能自动收） |
+| `--dry-run` | 只报告，不改任何文件 |
+
+脚本是幂等的，重复运行不会重复加依赖或叠加补丁。卸载就是把 `dependencies`
+和 `dsh.profile.bundles` 里的 `dsh-qqbot-ext` 删掉再 `pnpm install`。
+
+### 手动安装
+
+1. 编辑 profile 目录的 `package.json`（默认 `~/.dsh/profiles/desktop`）：
+   - `dependencies` 加 `"dsh-qqbot-ext": "file:<本仓库 dsh-qqbot-ext 目录的绝对路径>"`
+   - `dsh.profile.bundles` 数组加 `"dsh-qqbot-ext"`
+2. 在该 profile 目录跑 `pnpm install`
+3. 重启 DSH
 
 细节与目录结构见 [`dsh-qqbot-ext/README.md`](dsh-qqbot-ext/README.md)。
 
@@ -58,6 +84,8 @@ pnpm install
 > 原因见 [`tools/PATCHES.md`](tools/PATCHES.md)。
 
 ## 打补丁（可选）
+
+`install.mjs` 默认会自动打。也可以单独跑：
 
 ```bash
 # 默认改 ~/.dsh/profiles/desktop；别的 profile 用 --profile 指定
