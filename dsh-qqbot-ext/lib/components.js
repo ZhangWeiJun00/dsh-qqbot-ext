@@ -24,6 +24,13 @@ export const COMPONENTS = [
     ],
   },
   {
+    id: 'roleplay',
+    title: '人物扮演',
+    summary: '导入与编辑人设卡，为 QQ 群聊和私聊设置默认角色或单独绑定角色，保存后下一轮生效。',
+    editable: true,
+    tools: [],
+  },
+  {
     id: 'ext-tools',
     title: '示例工具',
     summary: '扩展自带的调试工具，用来确认插件真的装载了。',

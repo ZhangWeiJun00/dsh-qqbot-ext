@@ -809,6 +809,251 @@ window.__ModuleLoader__.load({
             busy ? '保存中…' : '保存')))
     }
 
+    /** 角色配置始终在本地草稿中编辑，保存时一次提交整个 config。 */
+    function RoleplaySection() {
+      const path = '/qqbot-ext/roleplay'
+      const [config, setConfig] = React.useState(null)
+      const [saved, setSaved] = React.useState('')
+      const [revision, setRevision] = React.useState('')
+      const [selected, setSelected] = React.useState('')
+      const [busy, setBusy] = React.useState(false)
+      const [loading, setLoading] = React.useState(true)
+      const [note, setNote] = React.useState(null)
+      const [importName, setImportName] = React.useState('')
+      const [importContent, setImportContent] = React.useState('')
+      const [loadVersion, setLoadVersion] = React.useState(0)
+      const fileInput = React.useRef(null)
+      const dirty = config !== null && JSON.stringify(config) !== saved
+      const hasDraft = dirty || importName !== '' || importContent !== ''
+      const newId = () => typeof window.crypto?.randomUUID === 'function'
+        ? window.crypto.randomUUID() : `card-${Date.now()}-${Math.random().toString(36).slice(2)}`
+      const message = (error) => error instanceof Error ? error.message : String(error)
+      const request = async (payload) => {
+        const response = await fetch(path, payload === undefined
+          ? { headers: { accept: 'application/json' } }
+          : { method: 'POST', headers: { 'content-type': 'application/json', accept: 'application/json' },
+            body: JSON.stringify(payload) })
+        const body = await response.json()
+        if (response.status === 409) throw new Error('另一页面已更新角色配置，请先备份当前草稿并重新打开配置。')
+        if (!response.ok || body?.ok !== true) throw new Error(body?.error || `请求失败（${response.status}）`)
+        return body
+      }
+
+      React.useEffect(() => {
+        let alive = true
+        setLoading(true)
+        setNote(null)
+        request().then((body) => {
+          if (!body.config || !Array.isArray(body.config.cards) || !Array.isArray(body.config.bindings)) {
+            throw new Error('角色配置格式无效')
+          }
+          if (!alive) return
+          setConfig(body.config)
+          setRevision(body.revision)
+          setSaved(JSON.stringify(body.config))
+          setSelected(body.config.cards[0]?.id ?? '')
+        }).catch((error) => {
+          if (alive) setNote({ ok: false, text: `读取角色配置失败：${message(error)}` })
+        }).finally(() => { if (alive) setLoading(false) })
+        return () => { alive = false }
+      }, [loadVersion])
+
+      React.useEffect(() => {
+        if (!hasDraft) return undefined
+        const warn = (event) => { event.preventDefault(); event.returnValue = '' }
+        window.addEventListener('beforeunload', warn)
+        return () => window.removeEventListener('beforeunload', warn)
+      }, [hasDraft])
+
+      const patch = (update) => { setConfig((previous) => update(previous)); setNote(null) }
+      const editCard = (key, value) => patch((previous) => ({ ...previous,
+        cards: previous.cards.map((card) => card.id === selected ? { ...card, [key]: value } : card) }))
+      const appendCard = (card) => {
+        // 导入可能带入已有 id；保留旧卡，给新草稿分配独立 id。
+        patch((previous) => ({ ...previous, cards: [...previous.cards, card] }))
+        setSelected(card.id)
+      }
+      const removeCard = () => {
+        const card = config.cards.find((item) => item.id === selected)
+        if (!card || !window.confirm(`删除角色「${card.name || '未命名'}」？关联会话将改为禁用默认角色；保存后生效。`)) return
+        const remaining = config.cards.filter((item) => item.id !== selected)
+        patch((previous) => ({ ...previous, cards: remaining,
+          defaultCardId: previous.defaultCardId === selected ? '' : previous.defaultCardId,
+          bindings: previous.bindings.map((binding) => binding.cardId === selected
+            ? { ...binding, cardId: '' } : binding) }))
+        setSelected(remaining[0]?.id ?? '')
+      }
+      const parseImport = async (name, content) => {
+        if (!content.trim()) throw new Error('请先选择文件或粘贴角色内容')
+        const body = await request({ action: 'import', name, content })
+        if (!body.card || typeof body.card.name !== 'string' || typeof body.card.content !== 'string') {
+          throw new Error('导入接口未返回有效角色卡')
+        }
+        const id = typeof body.card.id === 'string' && body.card.id && !config.cards.some((card) => card.id === body.card.id)
+          ? body.card.id : newId()
+        appendCard({ ...body.card, id })
+        setImportName('')
+        setImportContent('')
+        setNote({ ok: true, text: '角色卡已并入草稿，点击保存后生效。' })
+      }
+      const importPaste = async () => {
+        setBusy(true)
+        setNote(null)
+        try { await parseImport(importName, importContent) }
+        catch (error) { setNote({ ok: false, text: `导入失败：${message(error)}` }) }
+        finally { setBusy(false) }
+      }
+      const importFile = async (event) => {
+        const file = event.currentTarget.files?.[0]
+        event.currentTarget.value = ''
+        if (!file) return
+        if (file.size > 3 * 1024 * 1024) {
+          setNote({ ok: false, text: '文件不能超过 3 MB' }); return
+        }
+        if (!/\.(txt|md|json)$/i.test(file.name)) {
+          setNote({ ok: false, text: '请选择 txt、md 或 json 文件' }); return
+        }
+        setBusy(true)
+        setNote(null)
+        try {
+          const content = await file.text()
+          // 解析失败时保留文件文本，方便修正后重新导入。
+          setImportName(file.name.replace(/\.(txt|md|json)$/i, ''))
+          setImportContent(content)
+          await parseImport(file.name.replace(/\.(txt|md|json)$/i, ''), content)
+        } catch (error) { setNote({ ok: false, text: `导入失败：${message(error)}` }) }
+        finally { setBusy(false) }
+      }
+      const save = async (event) => {
+        event.preventDefault()
+        if (busy || !dirty) return
+        const keys = new Set()
+        const ids = new Set(config.cards.map((card) => card.id))
+        for (const binding of config.bindings) {
+          if (typeof binding.conversationKey !== 'string' || !binding.conversationKey.trim()) {
+            setNote({ ok: false, text: '会话标识不能为空，请填写或删除空绑定。' }); return
+          }
+          if (keys.has(binding.conversationKey)) {
+            setNote({ ok: false, text: `会话绑定重复：${binding.conversationKey}` }); return
+          }
+          keys.add(binding.conversationKey)
+          if (binding.cardId && !ids.has(binding.cardId)) {
+            setNote({ ok: false, text: '会话绑定的角色不存在，请重新选择。' }); return
+          }
+        }
+        if (config.defaultCardId && !ids.has(config.defaultCardId)) {
+          setNote({ ok: false, text: '默认角色不存在，请重新选择。' }); return
+        }
+        setBusy(true)
+        setNote(null)
+        try {
+          const body = await request({ config, revision })
+          const next = body.config ?? config
+          setConfig(next)
+          setRevision(body.revision)
+          setSaved(JSON.stringify(next))
+          setNote({ ok: true, text: '已保存，QQ 会话下一轮生效。' })
+        } catch (error) { setNote({ ok: false, text: `保存失败，草稿已保留：${message(error)}` }) }
+        finally { setBusy(false) }
+      }
+
+      if (loading) return h('div', { className: 'qbe-empty' }, '正在读取角色配置…')
+      if (config === null) return h('div', { className: 'qbe-field' },
+        h('p', { className: 'qbe-note qbe-note--error', role: 'alert' }, note?.text),
+        h('button', { type: 'button', className: 'qbe-mini', onClick: () => setLoadVersion((v) => v + 1) }, '重试'))
+      const card = config.cards.find((item) => item.id === selected)
+      const options = (emptyLabel, value) => [
+        h('option', { key: '', value: '' }, emptyLabel),
+        ...config.cards.map((item) => h('option', { key: item.id, value: item.id }, item.name || '未命名角色')),
+        value && !config.cards.some((item) => item.id === value)
+          ? h('option', { key: value, value }, `角色不存在：${value}`) : null,
+      ]
+      return h('form', { className: 'qbe-form', onSubmit: save },
+        h('p', { className: 'qbe-help' }, '仅对 QQ 会话生效；保存后从下一轮开始应用。旧会话已有历史可能影响角色表现，建议新建会话。'),
+        h('p', { className: 'qbe-hint' }, '切换角色卡或扩展组件会保留此页草稿；全部配置统一保存。刷新或关闭页面前请保存。'),
+        h('fieldset', { disabled: busy, style: { border: 0, padding: 0, margin: 0, minWidth: 0 } },
+          h('div', { className: 'qbe-field' },
+            h('div', { className: 'qbe-head' },
+              h('span', { className: 'qbe-label' }, '启用角色扮演'),
+              h(Switch, { label: '启用角色扮演', checked: config.enabled === true, disabled: busy,
+                onChange: (enabled) => patch((previous) => ({ ...previous, enabled })) }))),
+          h('label', { className: 'qbe-field' },
+            h('span', { className: 'qbe-label' }, '默认角色'),
+            h('select', { className: 'qbe-input qbe-select', value: config.defaultCardId,
+              onChange: (event) => { const value = event.currentTarget.value; patch((previous) => ({ ...previous, defaultCardId: value })) } },
+              options('不使用默认角色', config.defaultCardId))),
+          h('div', { className: 'qbe-field' },
+            h('div', { className: 'qbe-head' },
+              h('span', { className: 'qbe-label' }, '角色卡'),
+              h('button', { type: 'button', className: 'qbe-mini', onClick: () => appendCard({ id: newId(), name: '新角色', content: '' }) }, '新增'),
+              h('button', { type: 'button', className: 'qbe-mini', disabled: !card, onClick: removeCard }, '删除当前角色')),
+            h('select', { className: 'qbe-input qbe-select', 'aria-label': '切换编辑的角色卡', value: selected,
+              onChange: (event) => setSelected(event.currentTarget.value) },
+              config.cards.length ? config.cards.map((item) => h('option', { key: item.id, value: item.id }, item.name || '未命名角色'))
+                : h('option', { value: '' }, '暂无角色卡，请新增或导入')),
+            card ? h(React.Fragment, null,
+              h('label', { className: 'qbe-field' }, h('span', { className: 'qbe-label' }, '角色名称'),
+                h('input', { className: 'qbe-input', value: card.name, onChange: (event) => editCard('name', event.currentTarget.value) })),
+              h('label', { className: 'qbe-field' }, h('span', { className: 'qbe-label' }, '角色正文'),
+                h('textarea', { className: 'qbe-input qbe-textarea', rows: 12, spellCheck: false,
+                  value: card.content, onChange: (event) => editCard('content', event.currentTarget.value) }))) : null),
+          h('details', { className: 'qbe-advanced' },
+            h('summary', null, '导入角色卡（txt / md / json）'),
+            h('p', { className: 'qbe-hint' }, '文件与粘贴内容交给接口解析，仅加入草稿，不会直接保存。'),
+            h('input', { type: 'file', accept: '.txt,.md,.json,text/plain,text/markdown,application/json',
+              ref: fileInput, hidden: true, onChange: importFile }),
+            h('button', { type: 'button', className: 'qbe-mini', onClick: () => {
+              if ((importName || importContent) && !window.confirm('选择文件将替换尚未导入的粘贴内容，继续？')) return
+              fileInput.current?.click()
+            } }, '上传文件'),
+            h('label', { className: 'qbe-field' }, h('span', { className: 'qbe-label' }, '导入名称（可选）'),
+              h('input', { className: 'qbe-input', value: importName, onChange: (event) => setImportName(event.currentTarget.value) })),
+            h('label', { className: 'qbe-field' }, h('span', { className: 'qbe-label' }, '粘贴文本或 JSON'),
+              h('textarea', { className: 'qbe-input qbe-textarea', rows: 6, value: importContent,
+                onChange: (event) => setImportContent(event.currentTarget.value) })),
+            h('button', { type: 'button', className: 'qbe-mini', disabled: !importContent.trim(), onClick: importPaste }, '解析并加入草稿')),
+          h('div', { className: 'qbe-field' },
+            h('div', { className: 'qbe-head' }, h('span', { className: 'qbe-label' }, '会话绑定'),
+              h('button', { type: 'button', className: 'qbe-mini', onClick: () => patch((previous) => ({ ...previous,
+                bindings: [...previous.bindings, { conversationKey: '', cardId: '' }] })) }, '新增绑定')),
+            h('p', { className: 'qbe-help' }, '给某个 QQ 群或私聊指定专用角色。该聊天优先使用绑定角色，其他未绑定的聊天继续使用默认角色。'),
+            h('div', { className: 'qbe-advanced' },
+              h('div', { className: 'qbe-groupHead' }, '如何添加绑定'),
+              h('ol', { className: 'qbe-help', style: { paddingLeft: 20, margin: '8px 0' } },
+                h('li', null, '先在上方新增或导入角色卡，并打开“启用角色扮演”。'),
+                h('li', null, '点击“新增绑定”，按下面的格式填写完整会话标识，再选择要使用的角色。'),
+                h('li', null, '点击底部“保存全部配置”。从该 QQ 聊天的下一轮消息开始生效。')),
+              h('div', { className: 'qbe-groupHead' }, '官方 QQ 机器人的会话标识'),
+              h('p', { className: 'qbe-help' }, '私聊格式：', h('code', null, 'qqbot:appId:c2c:用户openid'), '；群聊格式：', h('code', null, 'qqbot:appId:group:群openid'), '。'),
+              h('p', { className: 'qbe-help' }, 'appId：填写 QQ 开放平台中该机器人应用的 AppID。用户 openid：填写官方私聊消息事件中的 author.user_openid。群 openid：填写官方群消息事件中的 group_openid。可从官方机器人网关日志或消息事件记录查找对应字段。'),
+              h('p', { className: 'qbe-help' }, '例如机器人 AppID 为 123456789，群消息中的 group_openid 为 ABCDEF，完整标识为 ', h('code', null, 'qqbot:123456789:group:ABCDEF'), '；私聊消息中的 user_openid 为 UVWXYZ，则填写 ', h('code', null, 'qqbot:123456789:c2c:UVWXYZ'), '。这里的 AppID 和 openid 都是示例，请替换为实际值。'),
+              h('p', { className: 'qbe-hint' }, 'openid 是官方平台分配的标识，不能用 QQ 号、群号、昵称或群名称代替，也不要填写 DSH 会话 ID。保留 qqbot 前缀、c2c / group 和半角冒号，不要照填占位词。同一个会话标识只能绑定一次。'),
+              h('div', { className: 'qbe-groupHead', style: { marginTop: 12 } }, '生效规则与例子'),
+              h('p', { className: 'qbe-help' }, '例如默认角色为“小鲸鱼”，将 qqbot:123456789:group:ABCDEF 绑定为“旅行者”：该群使用“旅行者”，其他没有绑定的聊天继续使用“小鲸鱼”。群绑定对整个群生效，暂不支持同一群按成员分别绑定。'),
+              h('p', { className: 'qbe-help' }, '选择“禁用默认角色”：该聊天不注入本模块的任何角色；工作区原有的人设仍可能生效。删除绑定：该聊天恢复使用默认角色；如果没有默认角色，就不注入本模块人设。'),
+              h('p', { className: 'qbe-hint' }, '绑定跟随 QQ 群或私聊目标，发送 /new 新建会话后仍然保留。切换差异较大的角色后，建议在对应 QQ 聊天发送 /new，减少旧角色历史的影响。关闭顶部总开关会停用全部默认角色和绑定角色。')),
+            config.bindings.length === 0 ? h('p', { className: 'qbe-hint' }, '暂无绑定，QQ 会话使用默认角色。') : null,
+            config.bindings.map((binding, index) => h('div', { className: 'qbe-field', key: index },
+              h('label', null, h('span', { className: 'qbe-label' }, `会话标识 ${index + 1}`),
+                h('input', { className: 'qbe-input', value: binding.conversationKey, spellCheck: false, placeholder: 'qqbot:实际AppID:group:实际群openid',
+                  onChange: (event) => { const value = event.currentTarget.value; patch((previous) => ({ ...previous,
+                    bindings: previous.bindings.map((item, i) => i === index ? { ...item, conversationKey: value } : item) })) } })),
+              h('div', { className: 'qbe-pathRow' },
+                h('select', { className: 'qbe-input qbe-select', 'aria-label': `会话 ${index + 1} 绑定角色`, value: binding.cardId,
+                  onChange: (event) => { const value = event.currentTarget.value; patch((previous) => ({ ...previous,
+                    bindings: previous.bindings.map((item, i) => i === index ? { ...item, cardId: value } : item) })) } },
+                  options('禁用默认角色', binding.cardId)),
+                h('button', { type: 'button', className: 'qbe-mini', onClick: () => {
+                  if (!window.confirm('删除此绑定？保存后该会话将恢复默认角色。')) return
+                  patch((previous) => ({ ...previous, bindings: previous.bindings.filter((_, i) => i !== index) }))
+                } }, '删除绑定')))))),
+        h('div', { className: 'qbe-footer' },
+          h('p', { className: `qbe-note${note && !note.ok ? ' qbe-note--error' : ''}`, role: note && !note.ok ? 'alert' : 'status', 'aria-live': 'polite' },
+            note?.text || (dirty ? '有改动还没保存' : '配置已保存'),
+            importContent || importName ? ' 另有导入内容尚未加入草稿。' : ''),
+          h('button', { type: 'submit', className: 'qbe-save', disabled: busy || !dirty }, busy ? '处理中…' : '保存全部配置')))
+    }
+
     /** 只读组件页：说明 + 用到的工具。 */
     function ReadonlySection({ component }) {
       return h('div', null,
@@ -834,7 +1079,7 @@ window.__ModuleLoader__.load({
       const overview = embedded === true ? null : h('div', null,
         h('h1', { className: 'qbe-title' }, TITLE),
         h('p', { className: 'qbe-subtitle' },
-          'QQ 机器人扩展：表情包图库、QQ 表情检索和调试工具。改动即时生效，不用重启。'),
+          'QQ 机器人扩展：人物扮演、表情包图库、QQ 表情检索和调试工具。配置保存后生效。'),
         h('div', { className: 'qbe-stats' },
           h('div', { className: 'qbe-stat' },
             h('b', null, String(data.capabilities?.stickerCount ?? 0)),
@@ -865,9 +1110,14 @@ window.__ModuleLoader__.load({
               h('div', null,
                 h('h2', null, current.title),
                 h('p', null, current.summary))),
-            current.editable === true
-              ? h(StickerLibrarySection, { data, setData, getWorkspace })
-              : h(ReadonlySection, { component: current })))
+            current.id === 'roleplay'
+              ? null
+              : current.editable === true
+                ? h(StickerLibrarySection, { data, setData, getWorkspace })
+                : h(ReadonlySection, { component: current }),
+            components.some((item) => item.id === 'roleplay')
+              ? h('div', { key: 'roleplay', hidden: current.id !== 'roleplay', className: 'qbe-configPanel' }, h(RoleplaySection))
+              : null))
     }
 
     /** 主面板页面容器（layout.selectPanel 目标）。 */

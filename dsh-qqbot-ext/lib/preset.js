@@ -9,7 +9,7 @@ export async function apply(ctx) {
     await ctx.agentPresets.register({
       id: 'qqbot-ext',
       name: 'QQ 机器人扩展',
-      description: '标准组件 + dsh-qqbot-ext 扩展组件（表情包图库、调试工具等）。',
+      description: '标准组件 + dsh-qqbot-ext 扩展组件（人物扮演、表情包图库、调试工具等）。',
       order: 20,
       plugins: (await import('./preset-plugins.js')).PRESET_PLUGINS,
     })
