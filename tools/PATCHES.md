@@ -8,6 +8,20 @@
 
 安装与验收结果、上游合并流程见 [`LOCAL-QQBOT.md`](LOCAL-QQBOT.md) 与包内 `LOCAL-MAINTENANCE.md`。配置路径 `~/.dsh-qqbot-ext`、`/qqbot-ext/*` 路由、`qqbot-ext` 预设 ID 与 raw 按需读取契约均不变；旧独立 `dsh-qqbot-ext` bundle 已从 profile 移除。
 
+## 2026-11-17：功能拆成独立插件组件（mnemon 同构，GUI 逐组件开关）
+
+**需求**：用户发现扩展功能不像记忆系统那样以独立插件组件进入 GUI，要求组件化。
+
+**实现**：
+- 新增 4 个组件包装器 `ext/lib/plugin-{sticker,roleplay,bilibili,tools}.js`：显式 import 对应 host 功能、逐个 try/catch（沿用 loadFeatures 隔离语义）；inject 只声明宿主服务（tools/systemPrompt），网关服务（qqbotExtStickerSender/CardReader/SessionRotator/Collector）一律惰性 ctx.get，网关未绑定组件照常加载。
+- `lib/index.js` 还原上游 pristine（移除 applyExtensions 接缝与 inject 改动）；im-qqbot 不再承载扩展功能。
+- bundle patch 追加 6 行组件插件行（sticker/roleplay/bilibili/tools/routes/preset）+ im-qqbot 共 7 个 GUI 组件；package.json 增加各组件运行时导出与 `./ext-<comp>/locale/*.json` 导出（子路径插件 GUI 标题走各自 locale，host-plugin.md 规则）；新增 12 个组件 locale 文件。
+- 跨插件事件无需改线：cordis 4.1.0 events `_resolve` 对字符串名 + payload 的 emit 不带 thisArg 过滤器，监听器全局可达（sticker-candidate/sticker-pending/sticker-collected/config-updated/system-prompt/assemble 均验证）。
+- 错误拦截不做独立组件（传输层接缝，outbound/middleware 静态引用状态机），保留配置总开关。
+- integrate 脚本同步：不再改 index.js、导出/插件行/locale 自动生成；lib/ 对 pristine 差异降为 5 文件（client/bootstrap/middleware-setup/session-manager/outbound）。
+
+**验证**：test-integrated 增加组件断言（6 插件行+导出+locale 导出、index pristine、4 包装器各自 apply 注册工具/服务/监听）；全套隔离测试过（master-switches 5、error-guard 15、roleplay 24+16+9、archived 10、sticker 20、card-links 13、bilibili 15、card-inbox、panel 53）；patch=pristine+append、exports 与 integrate 输出一致、ext 双向同步。**需 remove_bundle→install_bundle 重装 + 重启 DSH**；GUI 7 组件显示与开关待重启后目视验收。
+
 ## 2026-11-17：所有功能总开关实时生效（免二次保存）
 
 **需求**：所有的功能总开关应该是实时的，不需要二次点击保存（人设总开关此前已改，本次补齐其余）。

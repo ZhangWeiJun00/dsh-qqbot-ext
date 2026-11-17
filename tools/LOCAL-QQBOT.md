@@ -25,9 +25,9 @@
 
 旧独立 `dsh-qqbot-ext` bundle 已从 profile 移除（依赖与 bundle 条目均删除，`plugin_manager remove_bundle dsh-qqbot-ext`，2026-11-17）。停用不等于删除原配置和图库；仓库 `dsh-qqbot-ext/` 源码保留可恢复。
 
-对上游 `lib/` 的改动只有六个文件（与 pristine 上游逐字节 diff 验证）：
+对上游 `lib/` 的改动只有五个文件（与 pristine 上游逐字节 diff 验证）：
 
-- `lib/index.js`：`inject` 增加 `tools`/`systemPrompt`，`apply` 开头 `await applyExtensions(ctx)`（宿主功能与 im-qqbot 同上下文，接缝服务无需跨插件解析）。
+- `lib/index.js` **保持上游原样**。功能不再塞进 im-qqbot 的 apply：拆成独立插件组件（mnemon 同构），GUI 逐组件显示与开关——`ext-sticker`（收集+图库工具+判断+索引）、`ext-roleplay`、`ext-bilibili`、`ext-tools`（示例工具）、`ext-routes`、`ext-preset`，加 im-qqbot 共 7 个组件。包装器在 `ext/lib/plugin-*.js`，显式 import 各 host 功能并逐个 try/catch（沿用 loadFeatures 隔离语义）；网关服务一律惰性 ctx.get，不硬 inject（Cordis 事件总线按名字全局派发，无 thisArg 过滤器，跨插件可达——已核 cordis 4.1.0 src/events.ts `_resolve`）。子路径插件的 GUI 标题走各自 `./ext-<comp>/locale/*.json` 导出（host-plugin.md：子路径插件不读 package.json）。
 - `lib/gateway/middleware-setup.js`：卡片消息对象引用缓存（`qqbotExtCardReader`，入站不读 raw）+ `qqbot/sticker-candidate` 事件钩子 + **熔断闸门**（均在 contentSanitizer 之后、concurrencyGuard 之前；闸门在斜杠命令/待答问题之后，熔断期间命令仍可用）。
 - `lib/gateway/bootstrap.js`：`qqbotExtStickerSender`（只接受图库文件名，`conversationKey(agent)` 会话隔离）+ `qqbotExtSessionRotator`（`knownKeys()`/`rotate(key)`，供 ext-routes 人设保存路由轮换会话；不暴露 agent/bot/任意目标）。
 - `lib/client.js`：上游客户端与扩展面板**合并为一次包名 id 的 `.load` 注册**（`tools/merge-qqbot-client.mjs`）。Web boot graph 每包只有一个条目（entry name == package name），简单拼接会产生第二个 `id:'dsh-qqbot-ext'` 注册——没有 boot 条目、永不激活，面板不显示（2026-11-17 实测踩坑）。合并方式：捕获两份注册对象，单 factory 依次执行上游/扩展 factory，inject 并集，apply 串联、cleanup 逆序。
@@ -70,7 +70,7 @@
 - 错误拦截「启用错误拦截」：POST `{config:{errorGuardEnabled}}`，更新 saved 基线该字段。
 - 子选项仍走草稿+统一保存。测试 `tools/test-master-switches.mjs`（5 项）。纯客户端改动，刷新页面生效。
 
-`cordis.patch.yml` 追加 `dsh-qqbot-ext-routes` / `dsh-qqbot-ext-preset` 两行；`package.json` 增加 `./ext-agent` `./ext-routes` `./ext-preset` 导出、`files` 含 `ext`、版本与描述本地化。
+`cordis.patch.yml` 追加 6 行独立组件插件行（sticker/roleplay/bilibili/tools/routes/preset）；`package.json` 增加 `./ext-agent` 与 6 个组件的运行时导出 + 各自 `locale/*.json` 导出、`files` 含 `ext`、版本与描述本地化。
 
 ## 安装与生效检查（2026-11-17 已验证）
 
@@ -98,9 +98,9 @@
 3. **不要用 `file:` 协议**：pnpm 11 + hoisted 会把 `file:` 目录依赖的源码**整个搬进** profile 的 `node_modules`（按 `files` 打包后清空源目录）。本次实测 vendor 被清空，靠安装副本还原 + 上游 tarball 补齐开发文件才恢复。`link:` 不动源码。
 
 4. 验收（本次结果）：
-   - `list_plugins`：`include:im-qqbot`、`include:dsh-qqbot-ext-routes`、`include:dsh-qqbot-ext-preset` 均 `fiberPhase: active`。
+   - `list_plugins`：`include:im-qqbot` 与 6 个 `include:dsh-qqbot-ext-*` 组件均 `fiberPhase: active`。
    - `GET /qqbot/im-qqbot/bind` → `{"phase":"bound","appId":"1906376603"}`；`GET /qqbot/im-qqbot/config` 返回原 profile 配置（requireMention、access allowlist 等不变）。
-   - `GET /qqbot-ext/config` 返回原 `~/.dsh-qqbot-ext/config.json`（图库 `D:\临时文件\picture`、判断/索引模型、冷却 30s/间隔 10s 等全部保留），组件 4 个。
+   - `GET /qqbot-ext/config` 返回原 `~/.dsh-qqbot-ext/config.json`（图库 `D:\临时文件\picture`、判断/索引模型、冷却 30s/间隔 10s 等全部保留），组件 5 个（sticker-library/roleplay/bilibili-video/error-guard/ext-tools）。
    - `ext_now` 工具可调用（宿主功能装载正常）。
    - 隔离测试：`test-integrated-qqbot.mjs`（需 `--experimental-vm-modules`）、`test-archived-session-rotation.mjs`（10 项，需 `--experimental-vm-modules`）、`test-roleplay-rotation.mjs`（9 项）、`test-error-guard.mjs`（15 项）、`test-master-switches.mjs`（5 项）、`verify-qqbot-ext-panel.mjs`（53 项）、`test-sticker-search-send.mjs`（20 项）、`test-qq-card-links.mjs`（13 项）、`test-bilibili-video.mjs`（15 项）、`test-card-inbox.mjs`、`test-roleplay.mjs`（24 项）、`test-roleplay-ui.mjs`（16 项）、`check-sticker-layout.cjs` 全过。
    - **未验证**：真实 QQ 消息收发、表情收集/发送、卡片取链的真实新事件；浏览器面板渲染（无浏览器控制，客户端代码已拼接安装，GUI 刷新后实看）。安装 receipt 只证明安装与激活，不替代功能验收。
@@ -109,6 +109,6 @@
 
 1. 将新上游版本取到独立的新目录（`npm pack @tencent-connect/dsh-qqbot@<版本>`，沙箱下加 `--cache <工作区目录>`），保留当前可用维护副本。先比较上游版本差异，再比较本地补丁；不要直接覆盖当前 `vendor/dsh-qqbot`。
 2. 在新副本上跑 `node tools/integrate-qqbot.mjs`（脚本拒绝已集成副本、校验上游锚点；锚点变了先修脚本差异，不把手工残缺结果当成集成成功）。脚本恢复 `ext/`、`lib/` 加载点、客户端拼接、bundle patch、导出、locale meta、本地 `pnpm-workspace.yaml` 设置与版本号，并重放归档轮换（patch-archived-rotation.mjs）与错误拦截/熔断（patch-error-guard.mjs）。
-3. 按上节 provision 依赖；运行全部隔离测试；`lib/` 对 pristine 上游 diff 应只有六个集成文件。核对原配置路径、`/qqbot-ext/*` 路由与预设 ID 无重复加载。
+3. 按上节 provision 依赖；运行全部隔离测试；`lib/` 对 pristine 上游 diff 应只有五个集成文件。核对原配置路径、`/qqbot-ext/*` 路由与预设 ID 无重复加载。
 4. 验证通过后才更新维护目标：`remove_bundle` 旧安装 → `install_bundle` 裸目录（link:）。按 receipt 执行重启或其他后续步骤，再检查实际运行结果。
 5. 保留更新前的维护副本、集成脚本及配置备份，以便问题复现与回退。维护记录区分“文件已修改”“验证通过”“安装完成”和“运行验收通过”。

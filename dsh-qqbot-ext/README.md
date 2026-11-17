@@ -10,14 +10,18 @@ DSH / dsh-qqbot 扩展包。给官方 `@tencent-connect/dsh-qqbot` 挂自定义�
 ```
 dsh-qqbot-ext/
 ├── package.json          # dsh.bundle.patch 自动挂载 cordis.patch.yml；dsh.client 声明 Web 面板
-├── cordis.patch.yml      # 三个组件行：宿主 / 路由 / 预设
+├── cordis.patch.yml      # 独立装载：宿主 / 路由 / 预设三行；统一包拆成 7 个独立组件（见 tools/LOCAL-QQBOT.md）
 ├── client.js             # 浏览器端：「QQ 机器人扩展」总页（设置栏目 + 左侧主面板）
-├── icon.svg / locale/    # 插件列表显示用的图标与标题
+├── icon.svg / locale/    # 插件列表显示用的图标与标题；locale/<组件>/ 为各独立组件的 GUI 标题
 ├── lib/
 │   ├── load.js           # 功能文件装载器（扫目录、按名排序、逐个 register）
 │   ├── config.js         # 表情图库配置（~/.dsh-qqbot-ext/config.json，单一事实源）
 │   ├── components.js     # 面板的组件清单（加功能补一行 = 多一个页签）
-│   ├── index.js          # 宿主插件 → features/host/*
+│   ├── index.js          # 独立装载时的宿主插件入口（统一包不再使用）
+│   ├── plugin-sticker.js # 统一包独立组件：表情图库（收集+工具+判断+索引）
+│   ├── plugin-roleplay.js# 统一包独立组件：人物扮演
+│   ├── plugin-bilibili.js# 统一包独立组件：B站视频浏览
+│   ├── plugin-tools.js   # 统一包独立组件：示例工具
 │   ├── agent.js          # agent 插件 → features/agent/*（被预设引用）
 │   ├── routes.js         # 路由插件 → features/routes/*
 │   ├── preset.js         # 注册「QQ 机器人扩展」预设，dsh-qqbot /preset 自动列出
@@ -114,6 +118,10 @@ dsh-qqbot-ext/
 | `features/host/` | 全局（所有预设） | 工具、服务 | 重启后 |
 | `features/agent/` | 选了「QQ 机器人扩展」预设的会话 | 工具、提示词段 | 重启后 |
 | `features/routes/` | webServer | HTTP 路由 | 重启后 |
+
+> 统一包（vendor/dsh-qqbot）里 host 功能按域拆成独立插件组件（plugin-sticker/roleplay/bilibili/tools），
+> 新 host 文件要加进对应包装器的显式 import 列表；agent/routes 仍按目录自动装载。
+> 独立装载（lib/index.js + loadFeatures）保留扫目录语义，仅作遗留兼容。
 
 每个文件长这样（`_` 开头的文件会被跳过，文件名排序 = 加载顺序）：
 

@@ -26,8 +26,16 @@
         historyLimit: 10
         debug: false
 
-# Local QQ integrated modules (host tools share im-qqbot context).
+# Local QQ integrated modules: independent feature components (GUI per-component toggles).
 - insert:
+    - id: dsh-qqbot-ext-sticker
+      name: '@tencent-connect/dsh-qqbot/ext-sticker'
+    - id: dsh-qqbot-ext-roleplay
+      name: '@tencent-connect/dsh-qqbot/ext-roleplay'
+    - id: dsh-qqbot-ext-bilibili
+      name: '@tencent-connect/dsh-qqbot/ext-bilibili'
+    - id: dsh-qqbot-ext-tools
+      name: '@tencent-connect/dsh-qqbot/ext-tools'
     - id: dsh-qqbot-ext-routes
       name: '@tencent-connect/dsh-qqbot/ext-routes'
     - id: dsh-qqbot-ext-preset

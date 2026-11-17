@@ -12,10 +12,15 @@ assert.ok(pkg.exports['./ext-agent'])
 const preset = await text('ext/lib/preset-plugins.js')
 assert.ok(preset.includes("name: '@tencent-connect/dsh-qqbot/ext-agent'"))
 const index = await text('lib/index.js')
-assert.ok(index.includes('await applyExtensions(ctx)'))
+assert.ok(!index.includes('applyExtensions'), 'lib/index.js stays pristine (features load as independent component rows)')
+assert.ok(index.includes("export const inject = ['agents'];"))
 const patch = await text('cordis.patch.yml')
 assert.ok(!patch.includes("name: 'dsh-qqbot-ext'"))
-assert.ok(patch.includes("name: '@tencent-connect/dsh-qqbot/ext-routes'"))
+for (const comp of ['sticker', 'roleplay', 'bilibili', 'tools', 'routes', 'preset']) {
+  assert.ok(patch.includes(`name: '@tencent-connect/dsh-qqbot/ext-${comp}'`), 'component row ' + comp)
+  assert.ok(pkg.exports[`./ext-${comp}`], 'runtime export ' + comp)
+  assert.ok(pkg.exports[`./ext-${comp}/locale/*.json`], 'locale export ' + comp)
+}
 const client = await text('lib/client.js')
 assert.ok(client.includes("id: 'dsh-qqbot-ext'"))
 const setup = await text('lib/gateway/middleware-setup.js')
@@ -74,6 +79,30 @@ const gateIndex = middleware.findIndex(fn => fn.toString().includes('breakerGate
 const stickerIndex = middleware.findIndex(fn => fn.toString().includes('sticker-candidate'))
 assert.ok(gateIndex > stickerIndex, 'breaker gate sits after the sticker hook (before concurrency guard)')
 assert.ok(slashCommands.some(cmd => (Array.isArray(cmd.name) ? cmd.name : [cmd.name]).includes('resume')), '/resume command registered in the slash list (help-visible)')
+// 独立功能组件：各包装器在自己的 ctx 上 apply，注册各自的工具/服务/监听。
+const stickerPlugin = await import('../vendor/dsh-qqbot/ext/lib/plugin-sticker.js')
+const roleplayPlugin = await import('../vendor/dsh-qqbot/ext/lib/plugin-roleplay.js')
+const bilibiliPlugin = await import('../vendor/dsh-qqbot/ext/lib/plugin-bilibili.js')
+const toolsPlugin = await import('../vendor/dsh-qqbot/ext/lib/plugin-tools.js')
+function componentCtx() {
+  const s = new Map(), t = new Map(), l = []
+  return { s, t, l, ctx: { provide: (n, v) => s.set(n, v), get: n => s.get(n), on: (n) => l.push(n), emit: async () => {}, effect: (fn) => { fn(); return () => {} }, tools: { register: (tool) => t.set(tool.name, tool) }, systemPrompt: { section() {} }, logger: console } }
+}
+assert.deepEqual(stickerPlugin.inject, ['tools'])
+const sc = componentCtx()
+await stickerPlugin.apply(sc.ctx)
+assert.ok(sc.s.has('qqbotExtStickerCollector'), 'sticker component provides collector')
+assert.ok(sc.l.includes('qqbot/sticker-candidate'), 'sticker component listens for candidates')
+for (const n of ['qq_list_stickers', 'qq_send_sticker', 'qq_sticker_status']) assert.ok(sc.t.has(n), 'sticker tool ' + n)
+const rc = componentCtx()
+await roleplayPlugin.apply(rc.ctx)
+assert.ok(rc.l.includes('system-prompt/assemble'), 'roleplay component hooks prompt assembly')
+const bc = componentCtx()
+await bilibiliPlugin.apply(bc.ctx)
+for (const n of ['qq_video_read', 'qq_video_search', 'qq_card_video_links']) assert.ok(bc.t.has(n), 'bilibili tool ' + n)
+const tc = componentCtx()
+await toolsPlugin.apply(tc.ctx)
+assert.ok(tc.t.has('ext_now'), 'sample tool component registers ext_now')
 assert.ok((await text('LICENSE')).includes('MIT'))
 // Merged client bundle: the boot graph has one entry per package, so both factories
 // must register under the package id in a single .load; verify slots from both land.
@@ -103,4 +132,4 @@ for (const expected of ['settings.section:qqbot', 'settings.section:qqbot-ext', 
 assert.equal(typeof clientCleanup, 'function')
 clientCleanup()
 for (const fn of effectCleanups) fn()
-console.log('PASS integrated manifest, host/client/preset/route wiring; actual middleware + tool read; zero raw access before call; peer isolation; sticker context; sender registration and license; merged client registers both panels')
+console.log('PASS integrated manifest, independent feature components, host/client/preset/route wiring; actual middleware + tool read; zero raw access before call; peer isolation; sticker context; sender registration and license; merged client registers both panels')

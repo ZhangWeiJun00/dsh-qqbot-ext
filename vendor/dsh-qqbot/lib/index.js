@@ -1,15 +1,13 @@
-import { apply as applyExtensions } from '../ext/lib/index.js';
 import { ConfigSchema } from "./config.js";
 import { bootstrapGateway } from "./gateway/index.js";
 import { getProfileDir, resolveEnv } from "./shared/index.js";
 import { ensureCredentials, persistCredentialsToProfile, registerBoundCredentialRoutes } from "./setup/index.js";
 // ── Cordis 插件元数据 ──
 export const name = 'im-qqbot';
-export const inject = ['agents', 'tools', 'systemPrompt'];
+export const inject = ['agents'];
 export const Config = ConfigSchema;
 // ── 插件主体 ──
 export async function apply(ctx, config) {
-    await applyExtensions(ctx);
     const agents = ctx.agents;
     const logger = ctx.logger ?? console;
     let appId = resolveEnv(config.appId, 'QQBOT_APPID');

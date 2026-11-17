@@ -1,0 +1,6 @@
+{
+  "meta": {
+    "title": "配置接口",
+    "description": "扩展面板的本地配置路由（/qqbot-ext/*），保存即生效。"
+  }
+}
