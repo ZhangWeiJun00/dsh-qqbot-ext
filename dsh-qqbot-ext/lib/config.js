@@ -38,6 +38,12 @@ export const CONFIG_DEFAULTS = {
   indexTimeoutMs: 60000,
   sameStickerCooldownSeconds: 600,
   stickerSendIntervalSeconds: 15,
+  // 错误拦截与熔断（本地维护）：回合错误给原会话友好短提示、详情转发管理员；
+  // 连续错误达到阈值熔断停发，无自动恢复，只能管理员 /resume 人工合闸。
+  errorGuardEnabled: true,
+  errorNoticeText: '服务器繁忙，等会儿再试试～',
+  errorForwardOpenid: '',
+  breakerThreshold: 3,
 }
 
 /** 收集模式的合法取值。 */
@@ -126,6 +132,19 @@ export function normalizeConfig(patch, base) {
   next.indexTimeoutMs = toInt(input.indexTimeoutMs, current.indexTimeoutMs, 'indexTimeoutMs', 1000, 600000)
   next.sameStickerCooldownSeconds = toInt(input.sameStickerCooldownSeconds, current.sameStickerCooldownSeconds, 'sameStickerCooldownSeconds', 0, 2592000)
   next.stickerSendIntervalSeconds = toInt(input.stickerSendIntervalSeconds, current.stickerSendIntervalSeconds, 'stickerSendIntervalSeconds', 0, 86400)
+  if (input.errorGuardEnabled !== undefined) {
+    if (typeof input.errorGuardEnabled !== 'boolean') throw new Error('errorGuardEnabled 必须是布尔值')
+    next.errorGuardEnabled = input.errorGuardEnabled
+  }
+  for (const [key, limit] of [['errorNoticeText', 500], ['errorForwardOpenid', 128]]) {
+    if (input[key] === undefined) continue
+    if (typeof input[key] !== 'string' || input[key].length > limit) throw new Error(`${key} 格式或长度无效`)
+    next[key] = input[key]
+  }
+  if (next.errorForwardOpenid.trim() !== '' && !/^[A-Za-z0-9_-]+$/.test(next.errorForwardOpenid.trim())) {
+    throw new Error('errorForwardOpenid 只能包含字母、数字、下划线和连字符')
+  }
+  next.breakerThreshold = toInt(input.breakerThreshold, current.breakerThreshold, 'breakerThreshold', 0, 100)
   return next
 }
 

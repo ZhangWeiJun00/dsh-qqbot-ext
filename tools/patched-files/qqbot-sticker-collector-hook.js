@@ -52,3 +52,10 @@ ctx.provide('qqbotExtStickerSender', {
         return mediaSender.sendImage(target, { localPath });
     },
 });
+// Local maintenance: roleplay-change session rotation (consumed by the ext-routes
+// roleplay save route). Exposes known-key enumeration and per-key rotation only;
+// no agent, bot, or arbitrary session target is exposed.
+ctx.provide('qqbotExtSessionRotator', {
+    knownKeys() { return manager.knownSessionKeys(); },
+    async rotate(key) { await manager.removeByKey(key); },
+});

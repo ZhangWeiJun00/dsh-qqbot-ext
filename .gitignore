@@ -12,3 +12,10 @@ Thumbs.db
 *.zip
 dist/
 tmp/
+
+# 本地维护产物（vendor 依赖供给与上游参考副本，按需重建，见 tools/LOCAL-QQBOT.md）
+.pnpm-store/
+.pnpm-state/
+.pnpm-cache/
+.pnpm-localappdata/
+vendor/upstream/

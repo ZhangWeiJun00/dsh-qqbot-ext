@@ -543,6 +543,38 @@ window.__ModuleLoader__.load({
         setResult(null)
       }
 
+      // 总开关实时生效：只持久化 enabled（不带未保存草稿），失败回滚并提示未生效。
+      // 不整体替换 data.config——上方 useEffect 会因此重置整份表单丢掉草稿；
+      // 只同步概览的 autoCollect 展示，initial/form 就地改 enabled 保持其余草稿。
+      const toggleEnabled = (enabled) => {
+        if (busy) return
+        const previous = form.enabled === true
+        patch('enabled', enabled)
+        setBusy(true)
+        fetch(API_PATH, {
+          method: 'POST',
+          headers: { 'content-type': 'application/json' },
+          body: JSON.stringify({ config: { enabled } }),
+        }).then(async (res) => {
+          const body = await res.json().catch(() => ({}))
+          if (res.ok && body.ok === true) {
+            const next = body.config?.enabled === true
+            setInitial((cur) => ({ ...cur, enabled: next }))
+            setForm((cur) => ({ ...cur, enabled: next }))
+            setData((current) => current === null ? current : {
+              ...current,
+              capabilities: { ...current.capabilities, autoCollect: next },
+            })
+            setResult({ ok: true, message: next ? '已开启自动收集，实时生效。' : '已关闭自动收集，实时生效。' })
+            return
+          }
+          throw new Error(body.error ?? `保存失败（HTTP ${res.status}）`)
+        }).catch((err) => {
+          setForm((cur) => ({ ...cur, enabled: previous }))
+          setResult({ ok: false, message: `开关保存失败（未生效）：${err instanceof Error ? err.message : String(err)}` })
+        }).then(() => { setBusy(false) })
+      }
+
       const submit = (event) => {
         event.preventDefault()
         if (busy || form === null) return
@@ -646,8 +678,8 @@ window.__ModuleLoader__.load({
               isDefault: (form.enabled === true) === (defaults.enabled === true),
               onReset: resetTo('enabled'), disabled: busy, label: '自动收集',
             }),
-            h(Switch, { checked: form.enabled === true, label: '自动收集', onChange: (v) => patch('enabled', v) })),
-          h('p', { className: 'qbe-help' }, '只收 QQ 明确标成表情、且同一条消息只有一张图片的；普通照片不收。')),
+            h(Switch, { checked: form.enabled === true, label: '自动收集', disabled: busy, onChange: (v) => toggleEnabled(v) })),
+          h('p', { className: 'qbe-help' }, '只收 QQ 明确标成表情、且同一条消息只有一张图片的；普通照片不收。开关实时生效，无需点保存。')),
         h(Segmented, {
           label: '收集方式',
           value: form.collectMode ?? 'auto',
@@ -809,7 +841,8 @@ window.__ModuleLoader__.load({
             busy ? '保存中…' : '保存')))
     }
 
-    /** 角色配置始终在本地草稿中编辑，保存时一次提交整个 config。 */
+    /** 角色配置在本地草稿中编辑，保存时一次提交整个 config；
+     * 「启用角色扮演」总开关例外：切换即单独持久化、实时生效。 */
     function RoleplaySection() {
       const path = '/qqbot-ext/roleplay'
       const [config, setConfig] = React.useState(null)
@@ -952,9 +985,35 @@ window.__ModuleLoader__.load({
           setConfig(next)
           setRevision(body.revision)
           setSaved(JSON.stringify(next))
-          setNote({ ok: true, text: '已保存，QQ 会话下一轮生效。' })
+          setNote({ ok: true, text: body.message || '已保存，QQ 会话下一轮生效。' })
         } catch (error) { setNote({ ok: false, text: `保存失败，草稿已保留：${message(error)}` }) }
         finally { setBusy(false) }
+      }
+
+      // 总开关实时生效：基于「上次已保存快照」只持久化 enabled，不带入页面未保存
+      // 草稿（卡片正文/绑定等仍走统一保存）。失败回滚开关并明确提示未生效。
+      const toggleEnabled = async (enabled) => {
+        if (busy || config === null) return
+        let base
+        try { base = JSON.parse(saved) } catch {
+          setNote({ ok: false, text: '开关保存失败：已保存配置快照无效，请重新打开配置。' }); return
+        }
+        const previousEnabled = config.enabled === true
+        patch((previous) => ({ ...previous, enabled }))
+        setBusy(true)
+        try {
+          const body = await request({ config: { ...base, enabled }, revision })
+          const next = body.config ?? { ...base, enabled }
+          setSaved(JSON.stringify(next))
+          setRevision(body.revision)
+          setConfig((previous) => ({ ...previous, enabled: next.enabled === true }))
+          const rotated = typeof body.rotated === 'number' ? body.rotated : 0
+          setNote({ ok: true, text: (enabled ? '已开启人物扮演' : '已关闭人物扮演') + '，实时生效（QQ 下一轮）'
+            + (rotated > 0 ? `；${rotated} 个相关 QQ 会话已自动换新。` : '。') })
+        } catch (error) {
+          setConfig((previous) => ({ ...previous, enabled: previousEnabled }))
+          setNote({ ok: false, text: `开关保存失败（未生效）：${message(error)}` })
+        } finally { setBusy(false) }
       }
 
       if (loading) return h('div', { className: 'qbe-empty' }, '正在读取角色配置…')
@@ -969,14 +1028,15 @@ window.__ModuleLoader__.load({
           ? h('option', { key: value, value }, `角色不存在：${value}`) : null,
       ]
       return h('form', { className: 'qbe-form', onSubmit: save },
-        h('p', { className: 'qbe-help' }, '仅对 QQ 会话生效；保存后从下一轮开始应用。旧会话已有历史可能影响角色表现，建议新建会话。'),
-        h('p', { className: 'qbe-hint' }, '切换角色卡或扩展组件会保留此页草稿；全部配置统一保存。刷新或关闭页面前请保存。'),
+        h('p', { className: 'qbe-help' }, '仅对 QQ 会话生效。「启用角色扮演」总开关实时生效、无需保存；其余改动点底部「保存全部配置」后从下一轮开始应用。总开关切换或更换角色卡后，相关 QQ 会话会自动换新，消除旧人设历史影响。'),
+        h('p', { className: 'qbe-hint' }, '切换角色卡或扩展组件会保留此页草稿；除总开关外全部配置统一保存。刷新或关闭页面前请保存。'),
         h('fieldset', { disabled: busy, style: { border: 0, padding: 0, margin: 0, minWidth: 0 } },
           h('div', { className: 'qbe-field' },
             h('div', { className: 'qbe-head' },
               h('span', { className: 'qbe-label' }, '启用角色扮演'),
               h(Switch, { label: '启用角色扮演', checked: config.enabled === true, disabled: busy,
-                onChange: (enabled) => patch((previous) => ({ ...previous, enabled })) }))),
+                onChange: (enabled) => { void toggleEnabled(enabled) } })),
+            h('p', { className: 'qbe-hint' }, '总开关实时生效（QQ 下一轮），无需点保存；切换开关或更换角色卡后相关 QQ 会话自动换新。')),
           h('label', { className: 'qbe-field' },
             h('span', { className: 'qbe-label' }, '默认角色'),
             h('select', { className: 'qbe-input qbe-select', value: config.defaultCardId,
@@ -1031,7 +1091,7 @@ window.__ModuleLoader__.load({
               h('div', { className: 'qbe-groupHead', style: { marginTop: 12 } }, '生效规则与例子'),
               h('p', { className: 'qbe-help' }, '例如默认角色为“小鲸鱼”，将 qqbot:123456789:group:ABCDEF 绑定为“旅行者”：该群使用“旅行者”，其他没有绑定的聊天继续使用“小鲸鱼”。群绑定对整个群生效，暂不支持同一群按成员分别绑定。'),
               h('p', { className: 'qbe-help' }, '选择“禁用默认角色”：该聊天不注入本模块的任何角色；工作区原有的人设仍可能生效。删除绑定：该聊天恢复使用默认角色；如果没有默认角色，就不注入本模块人设。'),
-              h('p', { className: 'qbe-hint' }, '绑定跟随 QQ 群或私聊目标，发送 /new 新建会话后仍然保留。切换差异较大的角色后，建议在对应 QQ 聊天发送 /new，减少旧角色历史的影响。关闭顶部总开关会停用全部默认角色和绑定角色。')),
+              h('p', { className: 'qbe-hint' }, '绑定跟随 QQ 群或私聊目标，会话自动换新后仍然保留。切换差异较大的角色保存后，相关 QQ 会话会自动换新，减少旧角色历史的影响。关闭顶部总开关会立即停用全部默认角色和绑定角色（实时生效，无需保存）。')),
             config.bindings.length === 0 ? h('p', { className: 'qbe-hint' }, '暂无绑定，QQ 会话使用默认角色。') : null,
             config.bindings.map((binding, index) => h('div', { className: 'qbe-field', key: index },
               h('label', null, h('span', { className: 'qbe-label' }, `会话标识 ${index + 1}`),
@@ -1052,6 +1112,98 @@ window.__ModuleLoader__.load({
             note?.text || (dirty ? '有改动还没保存' : '配置已保存'),
             importContent || importName ? ' 另有导入内容尚未加入草稿。' : ''),
           h('button', { type: 'submit', className: 'qbe-save', disabled: busy || !dirty }, busy ? '处理中…' : '保存全部配置')))
+    }
+
+    /** 错误拦截组件：友好提示/管理员转发/熔断参数。独立读取，保存只提交本组件字段（服务端合并写入）。 */
+    function ErrorGuardSection() {
+      const path = '/qqbot-ext/config'
+      const FIELDS = ['errorGuardEnabled', 'errorNoticeText', 'errorForwardOpenid', 'breakerThreshold']
+      const pick = (config) => Object.fromEntries(FIELDS.map((key) => [key, config?.[key]]))
+      const [form, setForm] = React.useState(null)
+      const [defaults, setDefaults] = React.useState(null)
+      const [saved, setSaved] = React.useState('')
+      const [busy, setBusy] = React.useState(false)
+      const [note, setNote] = React.useState(null)
+      const [loadVersion, setLoadVersion] = React.useState(0)
+      const dirty = form !== null && JSON.stringify(form) !== saved
+      React.useEffect(() => {
+        let alive = true
+        fetch(path, { headers: { accept: 'application/json' } }).then((response) => response.json()).then((body) => {
+          if (!alive) return
+          if (body?.ok !== true) throw new Error(body?.error ?? '读取失败')
+          const subset = pick(body.config)
+          setForm(subset)
+          setDefaults(pick(body.defaults))
+          setSaved(JSON.stringify(subset))
+          setNote(null)
+        }).catch((error) => { if (alive) setNote({ ok: false, text: `读取错误拦截配置失败：${error.message ?? error}` }) })
+        return () => { alive = false }
+      }, [loadVersion])
+      const patch = (key, value) => { setForm((previous) => ({ ...previous, [key]: value })); setNote(null) }
+      const resetTo = (key) => () => patch(key, defaults?.[key])
+      // 总开关实时生效：只持久化 errorGuardEnabled（不带未保存草稿），失败回滚并提示未生效。
+      const toggleEnabled = (enabled) => {
+        if (busy || form === null) return
+        const previous = form.errorGuardEnabled === true
+        patch('errorGuardEnabled', enabled)
+        setBusy(true)
+        fetch(path, { method: 'POST', headers: { 'content-type': 'application/json', accept: 'application/json' }, body: JSON.stringify({ config: { errorGuardEnabled: enabled } }) })
+          .then(async (response) => {
+            const body = await response.json().catch(() => ({}))
+            if (!response.ok || body?.ok !== true) throw new Error(body?.error ?? `保存失败（${response.status}）`)
+            const next = body.config?.errorGuardEnabled === true
+            setForm((cur) => ({ ...cur, errorGuardEnabled: next }))
+            setSaved((cur) => { try { return JSON.stringify({ ...JSON.parse(cur), errorGuardEnabled: next }) } catch { return cur } })
+            setNote({ ok: true, text: next ? '已开启错误拦截，实时生效。' : '已关闭错误拦截，实时生效（回到上游技术报错行为）。' })
+          })
+          .catch((error) => {
+            setForm((cur) => ({ ...cur, errorGuardEnabled: previous }))
+            setNote({ ok: false, text: `开关保存失败（未生效）：${error.message ?? error}` })
+          })
+          .then(() => { setBusy(false) })
+      }
+      const save = async (event) => {
+        event.preventDefault()
+        if (busy || !dirty) return
+        setBusy(true)
+        setNote(null)
+        try {
+          const response = await fetch(path, { method: 'POST', headers: { 'content-type': 'application/json', accept: 'application/json' }, body: JSON.stringify({ config: form }) })
+          const body = await response.json()
+          if (!response.ok || body?.ok !== true) throw new Error(body?.error ?? `保存失败（${response.status}）`)
+          const subset = pick(body.config)
+          setForm(subset)
+          setSaved(JSON.stringify(subset))
+          setNote({ ok: true, text: '已保存，下一轮生效。' })
+        } catch (error) { setNote({ ok: false, text: `保存失败，草稿已保留：${error.message ?? error}` }) }
+        finally { setBusy(false) }
+      }
+      if (form === null) return h('div', { className: 'qbe-field' },
+        h('p', { className: 'qbe-note qbe-note--error', role: 'alert' }, note?.text ?? '正在读取错误拦截配置…'),
+        note ? h('button', { type: 'button', className: 'qbe-mini', onClick: () => setLoadVersion((v) => v + 1) }, '重试') : null)
+      const d = defaults ?? {}
+      return h('form', { className: 'qbe-form', onSubmit: save },
+        h('p', { className: 'qbe-help' }, '模型回合出错时：原会话只发友好短提示（正文留空则静默），技术详情全部转发管理员私聊；连续错误达到阈值自动熔断停发。无冷却、不自动恢复——只能由管理员在 QQ 发 /resume 人工合闸（/resume status 查状态，仅限管理员）。斜杠命令与待答问题不受熔断影响。'),
+        h('fieldset', { disabled: busy, style: { border: 0, padding: 0, margin: 0, minWidth: 0 } },
+          h('div', { className: 'qbe-field' },
+            h('div', { className: 'qbe-head' },
+              h('span', { className: 'qbe-label' }, '启用错误拦截'),
+              h(Switch, { label: '启用错误拦截', checked: form.errorGuardEnabled === true, disabled: busy,
+                onChange: (value) => toggleEnabled(value) })),
+            h('p', { className: 'qbe-hint' }, '开关实时生效，无需点保存。关闭后回到上游行为：原会话直接显示技术报错，不转发、不熔断。')),
+          h(TextAreaField, { label: '友好提示正文', value: form.errorNoticeText, defaultValue: d.errorNoticeText,
+            disabled: busy, onReset: resetTo('errorNoticeText'), onChange: (value) => patch('errorNoticeText', value),
+            placeholder: '留空 = 出错时原会话静默', help: '熔断期间也复用这条提示（每会话 60 秒至多一条）。' }),
+          h(TextField, { label: '管理员 openid', value: form.errorForwardOpenid, defaultValue: d.errorForwardOpenid,
+            disabled: busy, onReset: resetTo('errorForwardOpenid'), onChange: (value) => patch('errorForwardOpenid', value),
+            placeholder: '留空 = 官方配置 c2c 白名单第一个', help: '错误详情与熔断跳闸/恢复通知都发到这个私聊。' }),
+          h(NumberField, { label: '熔断阈值（连续错误回合）', value: form.breakerThreshold, defaultValue: d.breakerThreshold,
+            disabled: busy, onReset: resetTo('breakerThreshold'), onChange: (value) => patch('breakerThreshold', value),
+            help: '0 = 不熔断。未跳闸时成功回合清零计数；跳闸后不自动恢复，只能管理员 /resume 人工合闸。请求级瞬时重试由宿主 llm-retry 负责。' })),
+        h('div', { className: 'qbe-footer' },
+          h('p', { className: `qbe-note${note && !note.ok ? ' qbe-note--error' : ''}`, role: note && !note.ok ? 'alert' : 'status', 'aria-live': 'polite' },
+            note?.text || (dirty ? '有改动还没保存' : '配置已保存')),
+          h('button', { type: 'submit', className: 'qbe-save', disabled: busy || !dirty }, busy ? '处理中…' : '保存')))
     }
 
     /** 只读组件页：说明 + 用到的工具。 */
@@ -1079,7 +1231,7 @@ window.__ModuleLoader__.load({
       const overview = embedded === true ? null : h('div', null,
         h('h1', { className: 'qbe-title' }, TITLE),
         h('p', { className: 'qbe-subtitle' },
-          'QQ 机器人扩展：人物扮演、表情包图库、QQ 表情检索和调试工具。配置保存后生效。'),
+          'QQ 机器人扩展：人物扮演、表情包图库、错误拦截和调试工具。各功能总开关实时生效，其余配置保存后生效。'),
         h('div', { className: 'qbe-stats' },
           h('div', { className: 'qbe-stat' },
             h('b', null, String(data.capabilities?.stickerCount ?? 0)),
@@ -1110,13 +1262,16 @@ window.__ModuleLoader__.load({
               h('div', null,
                 h('h2', null, current.title),
                 h('p', null, current.summary))),
-            current.id === 'roleplay'
+            current.id === 'roleplay' || current.id === 'error-guard'
               ? null
               : current.editable === true
                 ? h(StickerLibrarySection, { data, setData, getWorkspace })
                 : h(ReadonlySection, { component: current }),
             components.some((item) => item.id === 'roleplay')
               ? h('div', { key: 'roleplay', hidden: current.id !== 'roleplay', className: 'qbe-configPanel' }, h(RoleplaySection))
+              : null,
+            components.some((item) => item.id === 'error-guard')
+              ? h('div', { key: 'error-guard', hidden: current.id !== 'error-guard', className: 'qbe-configPanel' }, h(ErrorGuardSection))
               : null))
     }
 

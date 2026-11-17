@@ -36,7 +36,7 @@ function harness(config = initial()) {
       if (responseOverride) return responseOverride(payload)
       const body = !payload ? { ok: true, config, revision: 'revision-1' }
         : payload.action === 'import' ? { ok: true, card: { id: 'imported', name: payload.name || 'Imported', content: payload.content } }
-          : { ok: true, revision: 'revision-2', config: { ...payload.config, cards: payload.config.cards.map((card) => ({ ...card, name: card.name.trim() })) } }
+          : { ok: true, revision: 'revision-2', rotated: 1, message: '人设已保存，1 个相关 QQ 会话已自动换新，下一轮生效', config: { ...payload.config, cards: payload.config.cards.map((card) => ({ ...card, name: card.name.trim() })) } }
       return { ok: true, status: 200, json: async () => body }
     },
   })
@@ -149,5 +149,54 @@ await test('revision conflict preserves draft and asks to back up before reopeni
   assert.match(ui.text(ui.tree), /另一页面已更新角色配置，请先备份当前草稿并重新打开配置/)
   await ui.save()
   assert.equal(ui.requests.at(-1).payload.revision, 'revision-1')
+})
+// 此 harness 不实例化函数组件：Switch 以组件元素存在，直接读/调其 props。
+const masterSwitch = (ui) => ui.find((node) => typeof node.type === 'function' && node.type.name === 'Switch' && node.props.label === '启用角色扮演')
+const withCard = (enabled) => ({ enabled, defaultCardId: 'a', cards: [{ id: 'a', name: 'A', content: 'x' }], bindings: [] })
+await test('master switch persists immediately without unified save', async () => {
+  const ui = harness(withCard(false)); await ui.settle()
+  masterSwitch(ui).props.onChange(true)
+  await ui.settle()
+  const last = ui.requests.at(-1)
+  assert.equal(last.payload.config.enabled, true)
+  assert.equal(last.payload.revision, 'revision-1')
+  assert.equal(last.payload.config.cards[0].content, 'x')
+  assert.equal(masterSwitch(ui).props.checked, true)
+  assert.equal(ui.button('保存全部配置').props.disabled, true, 'no draft left to save')
+  assert.match(ui.text(ui.tree), /实时生效/)
+})
+await test('master switch save excludes unsaved draft edits', async () => {
+  const ui = harness(withCard(false)); await ui.settle()
+  ui.change(ui.field('角色正文', 'textarea'), 'draft-only')
+  masterSwitch(ui).props.onChange(true)
+  await ui.settle()
+  assert.equal(ui.requests.at(-1).payload.config.cards[0].content, 'x', 'saved snapshot, not the draft')
+  assert.equal(ui.field('角色正文', 'textarea').props.value, 'draft-only', 'draft preserved')
+  assert.equal(ui.button('保存全部配置').props.disabled, false, 'draft still dirty')
+  await ui.save()
+  assert.equal(ui.requests.at(-1).payload.config.cards[0].content, 'draft-only')
+  assert.equal(ui.requests.at(-1).payload.config.enabled, true)
+})
+await test('master switch failure reverts and reports not effective', async () => {
+  const ui = harness(withCard(true)); await ui.settle()
+  ui.override(async () => ({ ok: false, status: 500, json: async () => ({ ok: false, error: 'boom' }) }))
+  masterSwitch(ui).props.onChange(false)
+  await ui.settle()
+  assert.equal(masterSwitch(ui).props.checked, true, 'switch reverted')
+  assert.match(ui.text(ui.tree), /开关保存失败（未生效）/)
+})
+await test('turning master switch off reports auto rotation', async () => {
+  const ui = harness(withCard(true)); await ui.settle()
+  masterSwitch(ui).props.onChange(false)
+  await ui.settle()
+  assert.equal(ui.requests.at(-1).payload.config.enabled, false)
+  assert.match(ui.text(ui.tree), /已关闭人物扮演，实时生效/)
+  assert.match(ui.text(ui.tree), /1 个相关 QQ 会话已自动换新/)
+})
+await test('unified save surfaces the server rotation message', async () => {
+  const ui = harness(withCard(true)); await ui.settle()
+  ui.change(ui.field('角色正文', 'textarea'), 'edited persona')
+  await ui.save()
+  assert.match(ui.text(ui.tree), /人设已保存，1 个相关 QQ 会话已自动换新/)
 })
 console.log(`${cases} UI isolation tests passed; no real requests or configuration writes`)

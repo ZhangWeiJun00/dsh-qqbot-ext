@@ -100,6 +100,18 @@ export function resolveRoleplayCard(config, conversationKey) {
   const binding = config.bindings.find(item => item.conversationKey === conversationKey)
   return config.cards.find(card => card.id === (binding ? binding.cardId : config.defaultCardId))
 }
+
+/** 本地维护：配置变更前后解析人设发生变化的会话 key（供自动轮换会话）。
+ *  覆盖总开关切换、默认卡切换、绑定卡切换/禁用；卡片内容编辑（id 不变）不触发。 */
+export function affectedRoleplayKeys(previous, next, keys) {
+  const affected = []
+  for (const key of keys ?? []) {
+    const before = resolveRoleplayCard(previous, key)?.id
+    const after = resolveRoleplayCard(next, key)?.id
+    if (before !== after) affected.push(key)
+  }
+  return affected
+}
 // Card macros are narrative data, not DSH prompt variables. Resolve supported
 // macros once, then render remaining delimiters literally for the host parser.
 function literalCardText(value) {

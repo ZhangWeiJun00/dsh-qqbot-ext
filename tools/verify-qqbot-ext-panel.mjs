@@ -68,10 +68,11 @@ const sample = {
   version: '0.2.0',
   components: [
     { id: 'sticker-library', title: '表情包图库', summary: '自动收集别人发的表情包。', editable: true, toolInfo: [{ name: 'qq_list_stickers', description: '列出图库' }] },
+    { id: 'error-guard', title: '错误拦截', summary: '错误友好提示与熔断。', editable: true, toolInfo: [] },
     { id: 'ext-tools', title: '示例工具', summary: '调试工具。', editable: false, toolInfo: [{ name: 'ext_now', description: '报时间' }] },
   ],
   capabilities: { autoCollect: true, collectMode: 'auto', stickerCount: 4, stickerLimit: 300, pendingCount: 0, libraryExists: true },
-  config: { enabled: true, collectMode: 'auto', libraryDir: 'D:/x', minBytes: 1, maxBytes: 2, minEdge: 1, maxEdge: 2, maxAspect: 2, maxLibrary: 3, pendingLimit: 50, judgeEnabled: false, judgeProvider: '', judgeModel: '', judgePrompt: '', judgeMaxTokens: 200, judgeTimeoutMs: 60000 },
+  config: { enabled: true, collectMode: 'auto', libraryDir: 'D:/x', minBytes: 1, maxBytes: 2, minEdge: 1, maxEdge: 2, maxAspect: 2, maxLibrary: 3, pendingLimit: 50, judgeEnabled: false, judgeProvider: '', judgeModel: '', judgePrompt: '', judgeMaxTokens: 200, judgeTimeoutMs: 60000, indexEnabled: false, indexProvider: '', indexModel: '', indexPrompt: '', indexMaxTokens: 1200, indexTimeoutMs: 60000, sameStickerCooldownSeconds: 600, stickerSendIntervalSeconds: 15, errorGuardEnabled: true, errorNoticeText: '服务器繁忙，等会儿再试试～', errorForwardOpenid: '', breakerThreshold: 3 },
   libraryDir: 'D:/x',
   libraryExists: true,
   count: 4,
@@ -92,6 +93,18 @@ const sample = {
     judgePrompt: '',
     judgeMaxTokens: 200,
     judgeTimeoutMs: 60000,
+    indexEnabled: false,
+    indexProvider: '',
+    indexModel: '',
+    indexPrompt: '',
+    indexMaxTokens: 1200,
+    indexTimeoutMs: 60000,
+    sameStickerCooldownSeconds: 600,
+    stickerSendIntervalSeconds: 15,
+    errorGuardEnabled: true,
+    errorNoticeText: '服务器繁忙，等会儿再试试～',
+    errorForwardOpenid: '',
+    breakerThreshold: 3,
   },
 }
 globalThis.fetch = async () => ({ ok: true, json: async () => sample })
@@ -156,7 +169,11 @@ const Page = registered[1][1]
 render(Page({}))
 for (const effect of effects) { const cleanup = effect(); void cleanup }
 await new Promise((resolve) => setTimeout(resolve, 20))
-const tree = render(Page({}))
+let tree = render(Page({}))
+// 错误拦截组件在隐藏面板里自带异步首载：再 flush 一轮 effects 让它的表单落地。
+for (const effect of effects) { const cleanup = effect(); void cleanup }
+await new Promise((resolve) => setTimeout(resolve, 20))
+tree = render(Page({}))
 const tags = []
 const texts = []
 const walk = (node) => {
@@ -176,6 +193,8 @@ assert.ok(all.includes('示例工具'), 'second component tab')
 assert.ok(!all.includes('小黄脸'), 'removed QQ face component is gone')
 assert.ok(all.includes('图库保存位置'), 'library path field')
 assert.ok(all.includes('图库张数'), 'overview stat')
+assert.ok(all.includes('错误拦截'), 'error-guard component tab')
+assert.ok(all.includes('熔断阈值（连续错误回合）'), 'error-guard breaker field')
 ok('overview + component tabs + sticker form all render')
 
 // 每个配置项都要有「恢复默认」按钮（7 个字段 + 1 个「全部恢复」）
@@ -189,7 +208,7 @@ const collectResets = (node) => {
 }
 collectResets(tree)
 const resetLabels = resetButtons.map((props) => props['aria-label'] ?? '')
-const expectedLabels = ['自动收集', '收集方式', '图库保存位置', '张数上限', '暂存上限', '开启后台自动判断', '视觉模型', '判定提示词', '判断输出 token 上限', '判断超时（毫秒）', '最小字节', '最大字节', '最小长边（像素）', '最大长边（像素）', '最大长宽比']
+const expectedLabels = ['自动收集', '收集方式', '图库保存位置', '张数上限', '暂存上限', '开启后台自动判断', '视觉模型', '判定提示词', '判断输出 token 上限', '判断超时（毫秒）', '最小字节', '最大字节', '最小长边（像素）', '最大长边（像素）', '最大长宽比', '图片索引', '索引视觉模型', '索引提示词', '索引输出 token 上限', '索引超时（毫秒）', '同一张表情冷却（秒）', '表情发送间隔（秒）', '友好提示正文', '管理员 openid', '熔断阈值（连续错误回合）']
 for (const label of expectedLabels) {
   assert.ok(resetLabels.includes(`恢复默认：${label}`), `missing reset button for ${label}`)
 }
@@ -203,7 +222,10 @@ hookStore.clear()
 render(Page({}))
 for (const effect of effects) { const cleanup = effect(); void cleanup }
 await new Promise((resolve) => setTimeout(resolve, 20))
-const cleanTree = render(Page({}))
+let cleanTree = render(Page({}))
+for (const effect of effects) { const cleanup = effect(); void cleanup }
+await new Promise((resolve) => setTimeout(resolve, 20))
+cleanTree = render(Page({}))
 const cleanResets = []
 const collectClean = (node) => {
   if (!node) return
@@ -258,7 +280,9 @@ const collectTextareas = (node) => {
   ;(node.children ?? []).forEach(collectTextareas)
 }
 collectTextareas(cleanTree)
-assert.equal(textareas.length, 1, 'the judge prompt is a textarea')
+// 判定提示词与索引提示词都是 TextAreaField（rows=4）；图库管理页签另有元数据编辑框（rows=14）。
+assert.equal(textareas.filter((node) => node.props.rows === 4).length, 3, 'judge/index prompts and error notice are textareas')
+assert.equal(textareas.length, 4, 'prompt textareas plus the index metadata editor')
 ok('judge settings (provider/model/prompt) are configurable in the panel')
 
 // 从「全默认」出发只改一项：只有那一项的按钮可用
@@ -271,7 +295,10 @@ hookStore.clear()
 render(Page({}))
 for (const effect of effects) { const cleanup = effect(); void cleanup }
 await new Promise((resolve) => setTimeout(resolve, 20))
-const dirtyTree = render(Page({}))
+let dirtyTree = render(Page({}))
+for (const effect of effects) { const cleanup = effect(); void cleanup }
+await new Promise((resolve) => setTimeout(resolve, 20))
+dirtyTree = render(Page({}))
 const dirtyResets = []
 const collectDirty = (node) => {
   if (!node) return
@@ -599,7 +626,8 @@ await routes['/qqbot-ext/config'](makeReq(), res)
 const overview = JSON.parse(res.out.body)
 assert.equal(overview.ok, true)
 assert.equal(overview.version, '0.2.0')
-assert.equal(overview.components.length, 2)
+assert.equal(overview.components.length, 5)
+assert.deepEqual(overview.components.map((component) => component.id), ['sticker-library', 'roleplay', 'bilibili-video', 'error-guard', 'ext-tools'])
 assert.equal(overview.components[0].id, 'sticker-library')
 assert.equal(overview.components[0].editable, true)
 assert.ok(!overview.components.some((component) => component.id === 'qq-faces' || component.tools.includes('qq_list_faces')))
@@ -607,7 +635,7 @@ assert.ok(overview.capabilities && typeof overview.capabilities.stickerCount ===
 ok('GET returns overview + component list + capabilities')
 
 // defaults 必须是完整的一份，页面每个「恢复默认」按钮才都有值可用
-const defaultKeys = ['enabled', 'libraryDir', 'minBytes', 'maxBytes', 'minEdge', 'maxEdge', 'maxAspect', 'maxLibrary']
+const defaultKeys = ['enabled', 'collectMode', 'libraryDir', 'minBytes', 'maxBytes', 'minEdge', 'maxEdge', 'maxAspect', 'maxLibrary', 'pendingLimit', 'judgeEnabled', 'judgeProvider', 'judgeModel', 'judgePrompt', 'judgeMaxTokens', 'judgeTimeoutMs', 'indexEnabled', 'indexProvider', 'indexModel', 'indexPrompt', 'indexMaxTokens', 'indexTimeoutMs', 'sameStickerCooldownSeconds', 'stickerSendIntervalSeconds', 'errorGuardEnabled', 'errorNoticeText', 'errorForwardOpenid', 'breakerThreshold']
 for (const key of defaultKeys) {
   assert.ok(overview.defaults && overview.defaults[key] !== undefined, `defaults.${key} missing`)
 }
@@ -864,10 +892,17 @@ assert.equal(stored.collectMode, 'curated', 'reading such a config still keeps u
 ok('enabling the judge without a model is rejected on write, not on read')
 
 // 判断器：没配模型时一次模型调用都不该发生
+// 假流按 DSH 流协议给块：block-start / text-delta / block-end / finish。
+const fakeVisionStream = (text) => (async function* () {
+  yield { type: 'block-start', index: 0, blockType: 'text' }
+  yield { type: 'text-delta', index: 0, text }
+  yield { type: 'block-end', index: 0, block: { type: 'text', text } }
+  yield { type: 'finish', reason: { kind: 'stop' } }
+})()
 let llmCalls = 0
 const judgeCtx = {
   get: (name) => (name === 'llm'
-    ? { stream() { llmCalls += 1; return (async function* () { yield { type: 'text', text: 'KEEP' } })() } }
+    ? { stream() { llmCalls += 1; return fakeVisionStream('KEEP') } }
     : name === 'attachments'
       ? { async saveImage() { return { id: 'fake' } } }
       : undefined),
@@ -904,7 +939,7 @@ const judge2 = createJudge({
   logger: { warn() {} },
 })
 judgeCtx.get = (name) => (name === 'llm'
-  ? { stream() { llmCalls += 1; return (async function* () { yield { type: 'text', text: llmReply } })() } }
+  ? { stream() { llmCalls += 1; return fakeVisionStream(llmReply) } }
   : name === 'attachments'
     ? { async saveImage() { return { id: 'fake' } } }
     : undefined)

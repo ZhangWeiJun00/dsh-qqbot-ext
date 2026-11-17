@@ -2,6 +2,12 @@
 
 [DSH](https://github.com/deepseek-ai)（DeepSeek Harness）QQ 机器人扩展包。
 
+> **本机（大王 desktop profile）已改用统一包**：扩展功能整合进本地维护的官方插件发行包
+> `vendor/dsh-qqbot`（`@tencent-connect/dsh-qqbot@0.5.5-local.1`，`link:` 安装），
+> 独立 `dsh-qqbot-ext` bundle 已移除。本 README 的独立安装流程（install.mjs）仅适用于
+> 其他机器/profile；本机维护、安装与上游合并见 [`tools/LOCAL-QQBOT.md`](tools/LOCAL-QQBOT.md)。
+> 功能源码仍在本目录，`vendor/dsh-qqbot/ext/` 由 `tools/integrate-qqbot.mjs` 生成。
+
 挂在官方 [`@tencent-connect/dsh-qqbot`](https://www.npmjs.com/package/@tencent-connect/dsh-qqbot) 的标准扩展点上，
 不改上游源码就能加自己的工具、提示词段、Web 配置页和 Agent 预设。
 
