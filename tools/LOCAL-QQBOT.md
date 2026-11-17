@@ -27,7 +27,7 @@
 
 对上游 `lib/` 的改动只有五个文件（与 pristine 上游逐字节 diff 验证）：
 
-- `lib/index.js` **保持上游原样**。功能不再塞进 im-qqbot 的 apply：拆成独立插件组件（mnemon 同构），GUI 逐组件显示与开关——`ext-sticker`（收集+图库工具+判断+索引）、`ext-roleplay`、`ext-bilibili`、`ext-tools`（示例工具）、`ext-routes`、`ext-preset`，加 im-qqbot 共 7 个组件。包装器在 `ext/lib/plugin-*.js`，显式 import 各 host 功能并逐个 try/catch（沿用 loadFeatures 隔离语义）；网关服务一律惰性 ctx.get，不硬 inject（Cordis 事件总线按名字全局派发，无 thisArg 过滤器，跨插件可达——已核 cordis 4.1.0 src/events.ts `_resolve`）。子路径插件的 GUI 标题走各自 `./ext-<comp>/locale/*.json` 导出（host-plugin.md：子路径插件不读 package.json）。
+- `lib/index.js` **保持上游原样**。功能不再塞进 im-qqbot 的 apply：拆成独立插件组件（mnemon 同构），GUI 逐组件显示与开关——`ext-sticker`（收集+图库工具+判断+索引）、`ext-roleplay`、`ext-bilibili`、`ext-routes`、`ext-preset`，加 im-qqbot 共 6 个组件（示例工具 ext-tools 已按用户要求移除）。包装器在 `ext/lib/plugin-*.js`，显式 import 各 host 功能并逐个 try/catch（沿用 loadFeatures 隔离语义）；网关服务一律惰性 ctx.get，不硬 inject（Cordis 事件总线按名字全局派发，无 thisArg 过滤器，跨插件可达——已核 cordis 4.1.0 src/events.ts `_resolve`）。子路径插件的 GUI 标题走各自 `./ext-<comp>/locale/*.json` 导出（host-plugin.md：子路径插件不读 package.json）。
 - `lib/gateway/middleware-setup.js`：卡片消息对象引用缓存（`qqbotExtCardReader`，入站不读 raw）+ `qqbot/sticker-candidate` 事件钩子 + **熔断闸门**（均在 contentSanitizer 之后、concurrencyGuard 之前；闸门在斜杠命令/待答问题之后，熔断期间命令仍可用）。
 - `lib/gateway/bootstrap.js`：`qqbotExtStickerSender`（只接受图库文件名，`conversationKey(agent)` 会话隔离）+ `qqbotExtSessionRotator`（`knownKeys()`/`rotate(key)`，供 ext-routes 人设保存路由轮换会话；不暴露 agent/bot/任意目标）。
 - `lib/client.js`：上游客户端与扩展面板**合并为一次包名 id 的 `.load` 注册**（`tools/merge-qqbot-client.mjs`）。Web boot graph 每包只有一个条目（entry name == package name），简单拼接会产生第二个 `id:'dsh-qqbot-ext'` 注册——没有 boot 条目、永不激活，面板不显示（2026-11-17 实测踩坑）。合并方式：捕获两份注册对象，单 factory 依次执行上游/扩展 factory，inject 并集，apply 串联、cleanup 逆序。
@@ -100,8 +100,8 @@
 4. 验收（本次结果）：
    - `list_plugins`：`include:im-qqbot` 与 6 个 `include:dsh-qqbot-ext-*` 组件均 `fiberPhase: active`。
    - `GET /qqbot/im-qqbot/bind` → `{"phase":"bound","appId":"1906376603"}`；`GET /qqbot/im-qqbot/config` 返回原 profile 配置（requireMention、access allowlist 等不变）。
-   - `GET /qqbot-ext/config` 返回原 `~/.dsh-qqbot-ext/config.json`（图库 `D:\临时文件\picture`、判断/索引模型、冷却 30s/间隔 10s 等全部保留），组件 5 个（sticker-library/roleplay/bilibili-video/error-guard/ext-tools）。
-   - `ext_now` 工具可调用（宿主功能装载正常）。
+   - `GET /qqbot-ext/config` 返回原 `~/.dsh-qqbot-ext/config.json`（图库 `D:\临时文件\picture`、判断/索引模型、冷却 30s/间隔 10s 等全部保留），组件 4 个（sticker-library/roleplay/bilibili-video/error-guard）。
+   - `qq_list_stickers` 工具可调用（宿主功能装载正常）。
    - 隔离测试：`test-integrated-qqbot.mjs`（需 `--experimental-vm-modules`）、`test-archived-session-rotation.mjs`（10 项，需 `--experimental-vm-modules`）、`test-roleplay-rotation.mjs`（9 项）、`test-error-guard.mjs`（15 项）、`test-master-switches.mjs`（5 项）、`verify-qqbot-ext-panel.mjs`（53 项）、`test-sticker-search-send.mjs`（20 项）、`test-qq-card-links.mjs`（13 项）、`test-bilibili-video.mjs`（15 项）、`test-card-inbox.mjs`、`test-roleplay.mjs`（24 项）、`test-roleplay-ui.mjs`（16 项）、`check-sticker-layout.cjs` 全过。
    - **未验证**：真实 QQ 消息收发、表情收集/发送、卡片取链的真实新事件；浏览器面板渲染（无浏览器控制，客户端代码已拼接安装，GUI 刷新后实看）。安装 receipt 只证明安装与激活，不替代功能验收。
 

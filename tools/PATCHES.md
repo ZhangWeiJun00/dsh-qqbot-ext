@@ -8,6 +8,14 @@
 
 安装与验收结果、上游合并流程见 [`LOCAL-QQBOT.md`](LOCAL-QQBOT.md) 与包内 `LOCAL-MAINTENANCE.md`。配置路径 `~/.dsh-qqbot-ext`、`/qqbot-ext/*` 路由、`qqbot-ext` 预设 ID 与 raw 按需读取契约均不变；旧独立 `dsh-qqbot-ext` bundle 已从 profile 移除。
 
+## 2026-11-17：移除示例工具组件（ext-tools / ext_now）
+
+**需求**：用户表示示例工具功能不再需要。
+
+**实现**：删除 plugin-tools.js、features/host/00-now-tool.js、locale/tools（源码+vendor）；components.js 移除 ext-tools 页签与 ext_now/ext_echo 的 TOOL_INFO；bundle patch 与 exports 移除 ext-tools 行；integrate 脚本组件循环去掉 tools。GUI 组件 7→6（im-qqbot + sticker/roleplay/bilibili/routes/preset），面板页签 5→4。预设里的 ext_echo（agent 层示例）保留——它属于预设演示，不是被移除的 GUI 组件；01-deploy-note 提示文案同步去掉 ext_now。
+
+**验证**：test-integrated 增加「ext-tools 行/导出已移除」断言；面板 53 项（4 组件）、其余全套隔离测试过；ext 双向同步。需重启 DSH 生效。
+
 ## 2026-11-17：功能拆成独立插件组件（mnemon 同构，GUI 逐组件开关）
 
 **需求**：用户发现扩展功能不像记忆系统那样以独立插件组件进入 GUI，要求组件化。

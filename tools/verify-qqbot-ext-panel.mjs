@@ -69,7 +69,6 @@ const sample = {
   components: [
     { id: 'sticker-library', title: '表情包图库', summary: '自动收集别人发的表情包。', editable: true, toolInfo: [{ name: 'qq_list_stickers', description: '列出图库' }] },
     { id: 'error-guard', title: '错误拦截', summary: '错误友好提示与熔断。', editable: true, toolInfo: [] },
-    { id: 'ext-tools', title: '示例工具', summary: '调试工具。', editable: false, toolInfo: [{ name: 'ext_now', description: '报时间' }] },
   ],
   capabilities: { autoCollect: true, collectMode: 'auto', stickerCount: 4, stickerLimit: 300, pendingCount: 0, libraryExists: true },
   config: { enabled: true, collectMode: 'auto', libraryDir: 'D:/x', minBytes: 1, maxBytes: 2, minEdge: 1, maxEdge: 2, maxAspect: 2, maxLibrary: 3, pendingLimit: 50, judgeEnabled: false, judgeProvider: '', judgeModel: '', judgePrompt: '', judgeMaxTokens: 200, judgeTimeoutMs: 60000, indexEnabled: false, indexProvider: '', indexModel: '', indexPrompt: '', indexMaxTokens: 1200, indexTimeoutMs: 60000, sameStickerCooldownSeconds: 600, stickerSendIntervalSeconds: 15, errorGuardEnabled: true, errorNoticeText: '服务器繁忙，等会儿再试试～', errorForwardOpenid: '', breakerThreshold: 3 },
@@ -189,7 +188,7 @@ assert.ok(tags.includes('h1'), 'overview title rendered')
 assert.ok(tags.includes('form'), 'sticker library form rendered')
 assert.ok(all.includes('QQ 机器人扩展'), 'title text')
 assert.ok(all.includes('表情包图库'), 'sticker component tab')
-assert.ok(all.includes('示例工具'), 'second component tab')
+assert.ok(all.includes('错误拦截'), 'second component tab')
 assert.ok(!all.includes('小黄脸'), 'removed QQ face component is gone')
 assert.ok(all.includes('图库保存位置'), 'library path field')
 assert.ok(all.includes('图库张数'), 'overview stat')
@@ -626,8 +625,8 @@ await routes['/qqbot-ext/config'](makeReq(), res)
 const overview = JSON.parse(res.out.body)
 assert.equal(overview.ok, true)
 assert.equal(overview.version, '0.2.0')
-assert.equal(overview.components.length, 5)
-assert.deepEqual(overview.components.map((component) => component.id), ['sticker-library', 'roleplay', 'bilibili-video', 'error-guard', 'ext-tools'])
+assert.equal(overview.components.length, 4)
+assert.deepEqual(overview.components.map((component) => component.id), ['sticker-library', 'roleplay', 'bilibili-video', 'error-guard'])
 assert.equal(overview.components[0].id, 'sticker-library')
 assert.equal(overview.components[0].editable, true)
 assert.ok(!overview.components.some((component) => component.id === 'qq-faces' || component.tools.includes('qq_list_faces')))

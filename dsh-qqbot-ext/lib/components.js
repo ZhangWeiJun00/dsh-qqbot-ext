@@ -11,8 +11,6 @@ export const TOOL_INFO = {
   qq_card_video_links: '显式读取当前 Agent 对应 QQ 会话的卡片 raw，返回精简 B站链接；可传 message_id 指定卡片，默认最近卡片。入站仅保留最近 20 条卡片消息对象引用，10 分钟 TTL、最多 100 会话；不读取 raw、不修改 content、不注入上下文、不持久化 raw。工具只在调用时读取所选卡片 raw，不能跨会话；原始卡片实际是否包含链接仍待真实新事件确认。',
   qq_video_read: '只读浏览 B站视频：url 接受链接、BV号、av号或整条分享卡片，可指定 page、max_chars；仅标题输入返回 missing_link 且不发请求，先调用 qq_card_video_links 取得当前 QQ 会话卡片链接，再调用本工具；需要搜索时显式调用 qq_video_search，候选不能当作原卡片目标。读取公开元信息、字幕、热评和弹幕，不做画面视觉或语音识别；登录限制如实标注，无 cookie 配置。结果有 5 分钟有界缓存，网络请求有超时及响应大小上限。',
   qq_video_search: '按 query 搜索 B站视频，返回标题、UP主和视频链接等候选供确认；搜索结果不代表已读视频，确认后调用 qq_video_read。',
-  ext_now: '报服务器当前时间与时区，用来确认扩展装载正常。',
-  ext_echo: '原样回显一段文字，调试提示词用。',
 }
 
 export const COMPONENTS = [
@@ -46,12 +44,6 @@ export const COMPONENTS = [
     summary: '模型回合出错时给原会话友好短提示，技术详情转发管理员私聊；连续错误自动熔断停发，无自动恢复，管理员 /resume 人工合闸。',
     editable: true,
     tools: [],
-  },
-  {
-    id: 'ext-tools',
-    title: '示例工具',
-    summary: '扩展自带的调试工具，用来确认插件真的装载了。',
-    tools: ['ext_now', 'ext_echo'],
   },
 ]
 

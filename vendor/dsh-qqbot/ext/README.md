@@ -21,13 +21,11 @@ dsh-qqbot-ext/
 │   ├── plugin-sticker.js # 统一包独立组件：表情图库（收集+工具+判断+索引）
 │   ├── plugin-roleplay.js# 统一包独立组件：人物扮演
 │   ├── plugin-bilibili.js# 统一包独立组件：B站视频浏览
-│   ├── plugin-tools.js   # 统一包独立组件：示例工具
 │   ├── agent.js          # agent 插件 → features/agent/*（被预设引用）
 │   ├── routes.js         # 路由插件 → features/routes/*
 │   ├── preset.js         # 注册「QQ 机器人扩展」预设，dsh-qqbot /preset 自动列出
 │   └── preset-plugins.js # 预设组件清单（标准全量复刻 + 自定义行）
 └── features/
-    ├── host/00-now-tool.js      # 示例：全局工具 ext_now
     ├── host/01-sticker-auto-collect.js # 自动收集 QQ 表情消息图片
     ├── host/02-sticker-library-tools.js # 表情图库查询 / 发送 / 状态
     ├── host/_sticker-judge.js   # 后台自动判断（调视觉模型决定收不收）
@@ -105,7 +103,7 @@ dsh-qqbot-ext/
 
 2. 在该 profile 目录跑 `pnpm install`
 3. 重启 DSH（改插件必须重启才生效）
-4. QQ 里 `/preset` 选「QQ 机器人扩展」，试 `ext_echo` / `ext_now`
+4. QQ 里 `/preset` 选「QQ 机器人扩展」，试 `ext_echo`
 5. 验证路由：浏览器开 `http://127.0.0.1:<web端口>/qqbot-ext/status`（或本机 curl）
 
 > 表情包**收集**需要给上游 `dsh-qqbot` 打一个入站接缝补丁，见
@@ -178,7 +176,7 @@ export function register(ctx) {
   - **审美标准不写死在代码里**，全在 `judgePrompt`。以后接人格/人设模块，只改这段提示词即可。
   - 开了开关却没填 provider/model 会被**写入校验拦住并报错**，不会静默产生一堆失败调用。这条校验只在写入侧（`assertWritable`），不放进 `normalizeConfig`——否则一份写坏的配置会让 `readConfig` 整份退回默认值，把用户其它设置一起弄丢。
   - 走的是官方 `qqbot_describe_image` 同一条通道（宿主 `llm` 服务 + `attachments.saveImage`）；宿主没提供这两个服务时只报错跳过，不影响收集。
-- **配置页是「QQ 机器人扩展」总页**（设置里有同名栏目，左侧主面板也有入口）。页面是组件式的：概览统计 + 组件切换，**表情包图库只是其中第一个组件**，另有人物扮演、B站视频浏览和示例工具；B站视频浏览与示例工具只展示只读说明。组件清单在 `lib/components.js`，加功能补一行就多一个页签。数据走 `GET/POST /qqbot-ext/config`（旧的 `/qqbot-ext/sticker-config` 保留为别名）。
+- **配置页是「QQ 机器人扩展」总页**（设置里有同名栏目，左侧主面板也有入口）。页面是组件式的：概览统计 + 组件切换，**表情包图库只是其中第一个组件**，另有人物扮演、B站视频浏览和错误拦截；B站视频浏览只展示只读说明。组件清单在 `lib/components.js`，加功能补一行就多一个页签。数据走 `GET/POST /qqbot-ext/config`（旧的 `/qqbot-ext/sticker-config` 保留为别名）。
 - **每个配置项都有独立的「恢复默认」按钮**（当前值已等于默认值时自动禁用），底栏另有「全部恢复」；默认值由接口的 `defaults` 字段下发（`lib/config.js` 的 `CONFIG_DEFAULTS` 是唯一事实源，改默认值只改那一处）。恢复默认只是填回表单，仍要点「保存」才落盘。
 - **图库位置用「选择目录」按钮挑**：跟官方原生选择器同一套调法——优先 `globalThis.__DSH_DIRECTORY_PICKER__`（Desktop preload 注入），否则 `ctx.uiWorkspace.pickDirectory()`。成功返回绝对路径字符串，取消返回 null。
 - **`uiWorkspace` 绝对不能写进 `inject` 硬依赖**（踩过两次坑）：官方 picker 插件那样写是它自己的组合假设；这里一旦声明，服务没就绪会连带整个面板不激活，页面直接消失，比"选不了目录"严重得多。只声明 `inject: ['slots']`，`uiWorkspace` 在点击时惰性 `ctx.get` 并缓存。也别用 `ctx.get('remote.directoryPicker')`，那条路拿不到东西。

@@ -16,11 +16,13 @@ assert.ok(!index.includes('applyExtensions'), 'lib/index.js stays pristine (feat
 assert.ok(index.includes("export const inject = ['agents'];"))
 const patch = await text('cordis.patch.yml')
 assert.ok(!patch.includes("name: 'dsh-qqbot-ext'"))
-for (const comp of ['sticker', 'roleplay', 'bilibili', 'tools', 'routes', 'preset']) {
+for (const comp of ['sticker', 'roleplay', 'bilibili', 'routes', 'preset']) {
   assert.ok(patch.includes(`name: '@tencent-connect/dsh-qqbot/ext-${comp}'`), 'component row ' + comp)
   assert.ok(pkg.exports[`./ext-${comp}`], 'runtime export ' + comp)
   assert.ok(pkg.exports[`./ext-${comp}/locale/*.json`], 'locale export ' + comp)
 }
+assert.ok(!patch.includes('ext-tools'), 'sample-tools component removed')
+assert.ok(!pkg.exports['./ext-tools'], 'sample-tools export removed')
 const client = await text('lib/client.js')
 assert.ok(client.includes("id: 'dsh-qqbot-ext'"))
 const setup = await text('lib/gateway/middleware-setup.js')
@@ -83,7 +85,6 @@ assert.ok(slashCommands.some(cmd => (Array.isArray(cmd.name) ? cmd.name : [cmd.n
 const stickerPlugin = await import('../vendor/dsh-qqbot/ext/lib/plugin-sticker.js')
 const roleplayPlugin = await import('../vendor/dsh-qqbot/ext/lib/plugin-roleplay.js')
 const bilibiliPlugin = await import('../vendor/dsh-qqbot/ext/lib/plugin-bilibili.js')
-const toolsPlugin = await import('../vendor/dsh-qqbot/ext/lib/plugin-tools.js')
 function componentCtx() {
   const s = new Map(), t = new Map(), l = []
   return { s, t, l, ctx: { provide: (n, v) => s.set(n, v), get: n => s.get(n), on: (n) => l.push(n), emit: async () => {}, effect: (fn) => { fn(); return () => {} }, tools: { register: (tool) => t.set(tool.name, tool) }, systemPrompt: { section() {} }, logger: console } }
@@ -100,9 +101,6 @@ assert.ok(rc.l.includes('system-prompt/assemble'), 'roleplay component hooks pro
 const bc = componentCtx()
 await bilibiliPlugin.apply(bc.ctx)
 for (const n of ['qq_video_read', 'qq_video_search', 'qq_card_video_links']) assert.ok(bc.t.has(n), 'bilibili tool ' + n)
-const tc = componentCtx()
-await toolsPlugin.apply(tc.ctx)
-assert.ok(tc.t.has('ext_now'), 'sample tool component registers ext_now')
 assert.ok((await text('LICENSE')).includes('MIT'))
 // Merged client bundle: the boot graph has one entry per package, so both factories
 // must register under the package id in a single .load; verify slots from both land.

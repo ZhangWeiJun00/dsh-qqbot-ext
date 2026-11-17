@@ -8,6 +8,6 @@ export function register(ctx) {
     text: () =>
       `【dsh-qqbot-ext】扩展部署备注：${new Date().toLocaleString('zh-CN', {
         timeZone: 'Asia/Shanghai',
-      })} 时，扩展组件（ext_now / ext_echo / /qqbot-ext/status）已装载。`,
+      })} 时，扩展组件（ext_echo / /qqbot-ext/status）已装载。`,
   })
 }
