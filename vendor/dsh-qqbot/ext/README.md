@@ -30,7 +30,6 @@ dsh-qqbot-ext/
     ├── host/02-sticker-library-tools.js # 表情图库查询 / 发送 / 状态
     ├── host/_sticker-judge.js   # 后台自动判断（调视觉模型决定收不收）
     ├── host/03-sticker-judge-boot.js # 判断器挂载与防抖触发
-    ├── agent/00-echo-tool.js    # 示例：工具 ext_echo（只在本预设会话）
     ├── agent/01-deploy-note.js  # 示例：systemPrompt 提示词段
     ├── agent/02-sticker-curation-tools.js # 暂存表情的查看 / 采纳 / 丢弃
     ├── routes/00-status.js      # 示例：GET /qqbot-ext/status
@@ -103,7 +102,7 @@ dsh-qqbot-ext/
 
 2. 在该 profile 目录跑 `pnpm install`
 3. 重启 DSH（改插件必须重启才生效）
-4. QQ 里 `/preset` 选「QQ 机器人扩展」，试 `ext_echo`
+4. QQ 里 `/preset` 选「QQ 机器人扩展」，试 `qq_list_stickers`
 5. 验证路由：浏览器开 `http://127.0.0.1:<web端口>/qqbot-ext/status`（或本机 curl）
 
 > 表情包**收集**需要给上游 `dsh-qqbot` 打一个入站接缝补丁，见
