@@ -80,6 +80,27 @@ node <dsh-runtimes>/dependencies/pnpm/bin/pnpm.cjs install --prod --ignore-scrip
 
 详见 [`tools/LOCAL-QQBOT.md`](tools/LOCAL-QQBOT.md)。**禁用 `file:` 协议**（pnpm 11 hoisted 会搬空 vendor 源码）。
 
+## 发布包 / GitHub 一键安装
+
+统一包 `vendor/dsh-qqbot` **本身就是自包含、补丁已内置的可发布包**：5 个接缝补丁直接写在
+`lib/` 里（安装时无需再打），`ext/` 功能、`assets/`、locale、依赖声明全部随包携带，结构与官方包一致。
+
+**在「添加插件」里输 GitHub 地址**（指向子目录，仓库根不是包）：
+
+```
+github:ZhangWeiJun00/dsh-qqbot-ext#path:vendor/dsh-qqbot
+# 或
+https://github.com/ZhangWeiJun00/dsh-qqbot-ext#path:vendor/dsh-qqbot
+```
+
+pnpm 会拉取该子目录并自动安装它声明的依赖；`@deepseek-ai/*` peer 由 DSH 宿主提供，不用手装。
+
+**或打 tarball 分发**：在 `vendor/dsh-qqbot` 跑 `pnpm pack`，产物 `*.tgz` 可在添加插件里以
+路径/URL 安装。已用隔离目录验证：从 tarball 安装成功（37 个包、`ws` 可解析、补丁与 ext 均在包内）。
+
+> 本机维护仍推荐 `link:`（改源码即生效）；GitHub/tarball 方式适合分发到其他机器。
+> 直接输仓库根地址会失败（根目录无 package.json），必须带 `#path:vendor/dsh-qqbot`。
+
 ## 安装（独立 bundle，遗留方式）
 
 ```bash
