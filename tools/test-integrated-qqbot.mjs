@@ -8,24 +8,20 @@ const text = path => readFile(new URL(path, base), 'utf8')
 const pkg = JSON.parse(await text('package.json'))
 assert.equal(pkg.name, '@tencent-connect/dsh-qqbot')
 assert.equal(pkg.version, '0.5.5-local.1')
-assert.ok(pkg.exports['./ext-agent'])
-const preset = await text('ext/lib/preset-plugins.js')
-assert.ok(preset.includes("name: '@tencent-connect/dsh-qqbot/ext-agent'"))
-// 预设标准行必须跟当前 DSH 对齐：0.2.1 的 list-agents 子路径导出已不存在、modelSelectionSettings 已改名，
-// 漂移会让 qqbot-ext 预设挂载抛错（私聊 getOrCreate 炸、群聊默认预设不受影响）。
-assert.ok(!preset.includes('list-agents'), 'broken 0.2.1 subpath export removed from preset')
-assert.ok(!preset.includes('modelSelectionSettings'), 'renamed subagent config key removed')
-assert.ok(preset.includes('modelDiscovery: true'), 'current subagent modelDiscovery config present')
+// 预设已整体移除：ext-agent/ext-preset 导出与插件行都不应再存在（标准行复刻漂移风险随之消失）。
+assert.ok(!pkg.exports['./ext-agent'], 'ext-agent export removed with preset')
+assert.ok(!pkg.exports['./ext-preset'], 'ext-preset export removed with preset')
 const index = await text('lib/index.js')
 assert.ok(!index.includes('applyExtensions'), 'lib/index.js stays pristine (features load as independent component rows)')
 assert.ok(index.includes("export const inject = ['agents'];"))
 const patch = await text('cordis.patch.yml')
 assert.ok(!patch.includes("name: 'dsh-qqbot-ext'"))
-for (const comp of ['sticker', 'roleplay', 'bilibili', 'routes', 'preset']) {
+for (const comp of ['sticker', 'roleplay', 'bilibili', 'routes']) {
   assert.ok(patch.includes(`name: '@tencent-connect/dsh-qqbot/ext-${comp}'`), 'component row ' + comp)
   assert.ok(pkg.exports[`./ext-${comp}`], 'runtime export ' + comp)
   assert.ok(pkg.exports[`./ext-${comp}/locale/*.json`], 'locale export ' + comp)
 }
+assert.ok(!patch.includes('ext-preset'), 'preset plugin row removed')
 assert.ok(!patch.includes('ext-tools'), 'sample-tools component removed')
 assert.ok(!pkg.exports['./ext-tools'], 'sample-tools export removed')
 const client = await text('lib/client.js')
@@ -91,15 +87,18 @@ const stickerPlugin = await import('../vendor/dsh-qqbot/ext/lib/plugin-sticker.j
 const roleplayPlugin = await import('../vendor/dsh-qqbot/ext/lib/plugin-roleplay.js')
 const bilibiliPlugin = await import('../vendor/dsh-qqbot/ext/lib/plugin-bilibili.js')
 function componentCtx() {
-  const s = new Map(), t = new Map(), l = []
-  return { s, t, l, ctx: { provide: (n, v) => s.set(n, v), get: n => s.get(n), on: (n) => l.push(n), emit: async () => {}, effect: (fn) => { fn(); return () => {} }, tools: { register: (tool) => t.set(tool.name, tool) }, systemPrompt: { section() {} }, logger: console } }
+  const s = new Map(), t = new Map(), l = [], sec = []
+  return { s, t, l, sec, ctx: { provide: (n, v) => s.set(n, v), get: n => s.get(n), on: (n) => l.push(n), emit: async () => {}, effect: (fn) => { fn(); return () => {} }, tools: { register: (tool) => t.set(tool.name, tool) }, systemPrompt: { section: (x) => sec.push(x.name) }, logger: console } }
 }
-assert.deepEqual(stickerPlugin.inject, ['tools'])
+assert.deepEqual(stickerPlugin.inject, ['tools', 'systemPrompt'])
 const sc = componentCtx()
 await stickerPlugin.apply(sc.ctx)
 assert.ok(sc.s.has('qqbotExtStickerCollector'), 'sticker component provides collector')
 assert.ok(sc.l.includes('qqbot/sticker-candidate'), 'sticker component listens for candidates')
 for (const n of ['qq_list_stickers', 'qq_send_sticker', 'qq_sticker_status']) assert.ok(sc.t.has(n), 'sticker tool ' + n)
+// 预设移除后，原 agent 层暂存整理工具/提示词段并入 sticker 组件全局生效。
+for (const n of ['qq_sticker_pending', 'qq_sticker_keep', 'qq_sticker_drop']) assert.ok(sc.t.has(n), 'curation tool ' + n)
+assert.ok(sc.sec.includes('qqbot-ext-sticker-use'), 'sticker-use prompt section global')
 const rc = componentCtx()
 await roleplayPlugin.apply(rc.ctx)
 assert.ok(rc.l.includes('system-prompt/assemble'), 'roleplay component hooks prompt assembly')

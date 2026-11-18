@@ -18,20 +18,17 @@ dsh-qqbot-ext/
 │   ├── config.js         # 表情图库配置（~/.dsh-qqbot-ext/config.json，单一事实源）
 │   ├── components.js     # 面板的组件清单（加功能补一行 = 多一个页签）
 │   ├── index.js          # 独立装载时的宿主插件入口（统一包不再使用）
-│   ├── plugin-sticker.js # 统一包独立组件：表情图库（收集+工具+判断+索引）
+│   ├── plugin-sticker.js # 统一包独立组件：表情图库（收集+工具+判断+索引+暂存整理+提示）
 │   ├── plugin-roleplay.js# 统一包独立组件：人物扮演
 │   ├── plugin-bilibili.js# 统一包独立组件：B站视频浏览
-│   ├── agent.js          # agent 插件 → features/agent/*（被预设引用）
 │   ├── routes.js         # 路由插件 → features/routes/*
-│   ├── preset.js         # 注册「QQ 机器人扩展」预设，dsh-qqbot /preset 自动列出
-│   └── preset-plugins.js # 预设组件清单（标准全量复刻 + 自定义行）
 └── features/
     ├── host/01-sticker-auto-collect.js # 自动收集 QQ 表情消息图片
     ├── host/02-sticker-library-tools.js # 表情图库查询 / 发送 / 状态
     ├── host/_sticker-judge.js   # 后台自动判断（调视觉模型决定收不收）
     ├── host/03-sticker-judge-boot.js # 判断器挂载与防抖触发
-    ├── agent/01-deploy-note.js  # 示例：systemPrompt 提示词段
-    ├── agent/02-sticker-curation-tools.js # 暂存表情的查看 / 采纳 / 丢弃
+    ├── agent/01-deploy-note.js  # systemPrompt 提示词段（现由 sticker 组件全局装载）
+    ├── agent/02-sticker-curation-tools.js # 暂存表情的查看 / 采纳 / 丢弃（全局）
     ├── routes/00-status.js      # 示例：GET /qqbot-ext/status
     ├── routes/01-sticker-config.js # GET/POST /qqbot-ext/config（面板数据 + 图库配置）
     ├── routes/02-vision-models.js  # GET /qqbot-ext/vision-models（自动探测可用视觉模型）
@@ -113,11 +110,11 @@ dsh-qqbot-ext/
 | 目录 | 作用域 | 干什么 | 生效时机 |
 | --- | --- | --- | --- |
 | `features/host/` | 全局（所有预设） | 工具、服务 | 重启后 |
-| `features/agent/` | 选了「QQ 机器人扩展」预设的会话 | 工具、提示词段 | 重启后 |
+| `features/agent/` | 全局（由 sticker 组件装载，预设已移除） | 工具、提示词段 | 重启后 |
 | `features/routes/` | webServer | HTTP 路由 | 重启后 |
 
-> 统一包（vendor/dsh-qqbot）里 host 功能按域拆成独立插件组件（plugin-sticker/roleplay/bilibili/tools），
-> 新 host 文件要加进对应包装器的显式 import 列表；agent/routes 仍按目录自动装载。
+> 统一包（vendor/dsh-qqbot）里功能按域拆成独立插件组件（plugin-sticker/roleplay/bilibili），
+> 新功能文件要加进对应包装器的显式 import 列表；routes 仍按目录自动装载。
 > 独立装载（lib/index.js + loadFeatures）保留扫目录语义，仅作遗留兼容。
 
 每个文件长这样（`_` 开头的文件会被跳过，文件名排序 = 加载顺序）：
@@ -146,11 +143,11 @@ export function register(ctx) {
 
 单个功能加载失败不影响其他功能，错误打在 DSH 日志里（`[dsh-qqbot-ext] feature 加载失败: ...`）。
 
-## 预设组件清单
+## 预设已移除
 
-`lib/preset-plugins.js`：前半段是 `dsh-web-app/presets/standard.patch.yml` 的逐行复刻
-（dsh 0.2.1-rc.2，2026-11）。**千万别删标准行**——预设是整体替换语义，只写增量会丢 bash/pwsh/工具箱。
-末尾 `{ id: 'dsh-qqbot-ext-agent', name: 'dsh-qqbot-ext/agent' }` 才是自定义组件入口。
+qqbot-ext Agent 预设（及 `lib/preset.js`/`preset-plugins.js`/`agent.js`、标准行复刻）已整体删除。
+核心功能都是全局独立组件，不依赖预设；原预设独有的暂存整理工具与提示词段并入 ext-sticker 全局生效。
+私聊/群聊一律用宿主默认预设，彻底消除「标准行复刻跟不上 DSH 版本」的漂移风险。
 
 想再加 agent 作用域的独立插件行：往清单末尾补 `{ id, name, config? }` 就行。
 

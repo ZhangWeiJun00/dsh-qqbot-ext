@@ -16,17 +16,14 @@
     },
     "./locale/*.json": "./locale/*.json",
     "./package.json": "./package.json",
-    "./ext-agent": "./ext/lib/agent.js",
     "./ext-routes": "./ext/lib/routes.js",
-    "./ext-preset": "./ext/lib/preset.js",
     "./ext-sticker": "./ext/lib/plugin-sticker.js",
     "./ext-sticker/locale/*.json": "./ext/locale/sticker/*.json",
     "./ext-roleplay": "./ext/lib/plugin-roleplay.js",
     "./ext-roleplay/locale/*.json": "./ext/locale/roleplay/*.json",
     "./ext-bilibili": "./ext/lib/plugin-bilibili.js",
     "./ext-bilibili/locale/*.json": "./ext/locale/bilibili/*.json",
-    "./ext-routes/locale/*.json": "./ext/locale/routes/*.json",
-    "./ext-preset/locale/*.json": "./ext/locale/preset/*.json"
+    "./ext-routes/locale/*.json": "./ext/locale/routes/*.json"
   },
   "scripts": {
     "build": "tsc && tsdown --config tsdown.client.config.ts",

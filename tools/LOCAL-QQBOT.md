@@ -9,7 +9,7 @@
 - 统一包名：`@tencent-connect/dsh-qqbot`；集成后的本地版本：`0.5.5-local.1`。后续本地修订递增 `local` 序号，上游升级时同步调整基础版本（`integrate-qqbot.mjs` 现在从上游版本动态生成 `<上游版本>-local.1`）。
 - 上游来源：https://github.com/tencent-connect/dsh-qqbot 。保留包内上游来源信息，并记录每次引入的上游版本、可获得的提交或发布包来源。pristine 0.5.5 参考副本与 tarball 在 `vendor/upstream/`。
 - 上游采用 MIT 许可证。保留 `vendor/dsh-qqbot/LICENSE` 中的完整许可与 Tencent Connect 版权声明；复制、修改和分发时继续附带。不得将本地集成描述成上游官方发布。
-- 功能源码仍在仓库 `dsh-qqbot-ext/`；`vendor/dsh-qqbot/ext/` 是集成脚本生成的副本（仅 `lib/preset-plugins.js` 的 agent 组件名替换为 `@tencent-connect/dsh-qqbot/ext-agent`）。改功能先改源码，再重放集成。
+- 功能源码仍在仓库 `dsh-qqbot-ext/`；`vendor/dsh-qqbot/ext/` 是集成脚本生成的副本（与源码逐字节一致）。改功能先改源码，再重放集成。
 
 ## 集成边界与兼容约定
 
@@ -27,7 +27,7 @@
 
 对上游 `lib/` 的改动只有五个文件（与 pristine 上游逐字节 diff 验证）：
 
-- `lib/index.js` **保持上游原样**。功能不再塞进 im-qqbot 的 apply：拆成独立插件组件（mnemon 同构），GUI 逐组件显示与开关——`ext-sticker`（收集+图库工具+判断+索引）、`ext-roleplay`、`ext-bilibili`、`ext-routes`、`ext-preset`，加 im-qqbot 共 6 个组件（示例工具 ext-tools 已按用户要求移除）。包装器在 `ext/lib/plugin-*.js`，显式 import 各 host 功能并逐个 try/catch（沿用 loadFeatures 隔离语义）；网关服务一律惰性 ctx.get，不硬 inject（Cordis 事件总线按名字全局派发，无 thisArg 过滤器，跨插件可达——已核 cordis 4.1.0 src/events.ts `_resolve`）。子路径插件的 GUI 标题走各自 `./ext-<comp>/locale/*.json` 导出（host-plugin.md：子路径插件不读 package.json）。
+- `lib/index.js` **保持上游原样**。功能不再塞进 im-qqbot 的 apply：拆成独立插件组件（mnemon 同构），GUI 逐组件显示与开关——`ext-sticker`（收集+图库工具+判断+索引+暂存整理+提示）、`ext-roleplay`、`ext-bilibili`、`ext-routes`，加 im-qqbot 共 5 个组件（示例工具 ext-tools、qqbot-ext 预设均已按用户要求移除；原预设独有的暂存整理工具/提示词段并入 ext-sticker 全局生效）。包装器在 `ext/lib/plugin-*.js`，显式 import 各功能并逐个 try/catch（沿用 loadFeatures 隔离语义）；网关服务一律惰性 ctx.get，不硬 inject（Cordis 事件总线按名字全局派发，无 thisArg 过滤器，跨插件可达——已核 cordis 4.1.0 src/events.ts `_resolve`）。子路径插件的 GUI 标题走各自 `./ext-<comp>/locale/*.json` 导出（host-plugin.md：子路径插件不读 package.json）。
 - `lib/gateway/middleware-setup.js`：卡片消息对象引用缓存（`qqbotExtCardReader`，入站不读 raw）+ `qqbot/sticker-candidate` 事件钩子 + **熔断闸门**（均在 contentSanitizer 之后、concurrencyGuard 之前；闸门在斜杠命令/待答问题之后，熔断期间命令仍可用）。
 - `lib/gateway/bootstrap.js`：`qqbotExtStickerSender`（只接受图库文件名，`conversationKey(agent)` 会话隔离）+ `qqbotExtSessionRotator`（`knownKeys()`/`rotate(key)`，供 ext-routes 人设保存路由轮换会话；不暴露 agent/bot/任意目标）。
 - `lib/client.js`：上游客户端与扩展面板**合并为一次包名 id 的 `.load` 注册**（`tools/merge-qqbot-client.mjs`）。Web boot graph 每包只有一个条目（entry name == package name），简单拼接会产生第二个 `id:'dsh-qqbot-ext'` 注册——没有 boot 条目、永不激活，面板不显示（2026-11-17 实测踩坑）。合并方式：捕获两份注册对象，单 factory 依次执行上游/扩展 factory，inject 并集，apply 串联、cleanup 逆序。
@@ -70,7 +70,7 @@
 - 错误拦截「启用错误拦截」：POST `{config:{errorGuardEnabled}}`，更新 saved 基线该字段。
 - 子选项仍走草稿+统一保存。测试 `tools/test-master-switches.mjs`（5 项）。纯客户端改动，刷新页面生效。
 
-`cordis.patch.yml` 追加 6 行独立组件插件行（sticker/roleplay/bilibili/tools/routes/preset）；`package.json` 增加 `./ext-agent` 与 6 个组件的运行时导出 + 各自 `locale/*.json` 导出、`files` 含 `ext`、版本与描述本地化。
+`cordis.patch.yml` 追加 5 行独立组件插件行（sticker/roleplay/bilibili/routes，预设行已删）；`package.json` 增加 4 个组件的运行时导出 + 各自 `locale/*.json` 导出、`files` 含 `ext`、版本与描述本地化。
 
 ## 安装与生效检查（2026-11-17 已验证）
 
@@ -109,6 +109,6 @@
 
 1. 将新上游版本取到独立的新目录（`npm pack @tencent-connect/dsh-qqbot@<版本>`，沙箱下加 `--cache <工作区目录>`），保留当前可用维护副本。先比较上游版本差异，再比较本地补丁；不要直接覆盖当前 `vendor/dsh-qqbot`。
 2. 在新副本上跑 `node tools/integrate-qqbot.mjs`（脚本拒绝已集成副本、校验上游锚点；锚点变了先修脚本差异，不把手工残缺结果当成集成成功）。脚本恢复 `ext/`、`lib/` 加载点、客户端拼接、bundle patch、导出、locale meta、本地 `pnpm-workspace.yaml` 设置与版本号，并重放归档轮换（patch-archived-rotation.mjs）与错误拦截/熔断（patch-error-guard.mjs）。
-3. 按上节 provision 依赖；运行全部隔离测试；`lib/` 对 pristine 上游 diff 应只有五个集成文件。核对原配置路径、`/qqbot-ext/*` 路由与预设 ID 无重复加载。**升级 DSH 后必须按新版 `@deepseek-ai/dsh-web-app/presets/standard.patch.yml` 重新核对 `ext/lib/preset-plugins.js` 的标准行复刻**（0.2.1→0.2.2 曾因 list-agents 子路径导出删除/配置改名导致 qqbot-ext 预设挂载抛错、私聊会话创建失败）。
+3. 按上节 provision 依赖；运行全部隔离测试；`lib/` 对 pristine 上游 diff 应只有五个集成文件。核对原配置路径、`/qqbot-ext/*` 路由无重复加载。预设已整体移除（2026-11-18），不再有标准行复刻漂移问题；若未来要恢复预设，须按新版 `@deepseek-ai/dsh-web-app/presets/standard.patch.yml` 重新核对标准行。
 4. 验证通过后才更新维护目标：`remove_bundle` 旧安装 → `install_bundle` 裸目录（link:）。按 receipt 执行重启或其他后续步骤，再检查实际运行结果。
 5. 保留更新前的维护副本、集成脚本及配置备份，以便问题复现与回退。维护记录区分“文件已修改”“验证通过”“安装完成”和“运行验收通过”。

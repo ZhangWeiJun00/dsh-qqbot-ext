@@ -8,6 +8,18 @@
 
 安装与验收结果、上游合并流程见 [`LOCAL-QQBOT.md`](LOCAL-QQBOT.md) 与包内 `LOCAL-MAINTENANCE.md`。配置路径 `~/.dsh-qqbot-ext`、`/qqbot-ext/*` 路由、`qqbot-ext` 预设 ID 与 raw 按需读取契约均不变；旧独立 `dsh-qqbot-ext` bundle 已从 profile 移除。
 
+## 2026-11-18：整体移除 qqbot-ext 预设（核心功能已全局组件化，预设冗余）
+
+**需求**：组件化后核心功能不依赖预设；预设仅挂三样可全局化的 agent 小功能，且是标准行漂移风险源（上一条私聊炸的根因）。用户确认删除。
+
+**实现**：
+- 原 agent 层三功能（02-sticker-curation-tools 暂存整理三工具、03-sticker-use 提示段、01-deploy-note 提示段）并入 ext-sticker 包装器全局装载（inject 增加 systemPrompt）；features/agent 文件保留但不再被预设扫描。
+- 删除 lib/agent.js、lib/preset.js、lib/preset-plugins.js、locale/preset（源码+vendor）；package.json 去掉 ./agent ./preset（vendor 去掉 ./ext-agent ./ext-preset 及其 locale 导出）；cordis.patch.yml 去掉预设行。GUI 组件 6→5（im-qqbot + sticker/roleplay/bilibili/routes）。
+- integrate 脚本删除预设名替换/导出/插件行；ext 副本与源码从此逐字节一致（无替换差异）。
+- 私聊 prefs 的 qqbot-ext 绑定清空（实测已为 {}），回宿主默认预设；现存会话 header 的 agentPreset 解析失败时 composePreset 兜底 {} 走宿主组合，不影响恢复。
+
+**验证**：test-integrated 改为断言 ext-agent/ext-preset 导出与插件行已删、sticker 组件注册暂存三工具+sticker-use 提示段；全套隔离测试过；ext 双向逐字节同步、lib diff 仍 5 文件。需重启 DSH。
+
 ## 2026-11-18：修复 qqbot-ext 预设组件漂移（私聊会话创建抛异常的根因）
 
 **现象**：私聊回「⚠️ 处理消息时出现异常，请稍后重试。」（handleInbound 兜底），群聊正常；新会话日志只有 header、无回合。熔断正常（/resume status 无跳闸）。
