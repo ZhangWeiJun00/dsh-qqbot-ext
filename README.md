@@ -1,17 +1,31 @@
 # dsh-qqbot-ext
 
-[DSH](https://github.com/deepseek-ai)（DeepSeek Harness）QQ 机器人扩展包。
+[DSH](https://github.com/deepseek-ai)（DeepSeek Harness）QQ 机器人扩展。
 
-> **本机（大王 desktop profile）已改用统一包**：扩展功能整合进本地维护的官方插件发行包
+> **当前形态：本地维护的统一包。** 扩展功能已整合进本地维护的官方插件发行包
 > `vendor/dsh-qqbot`（`@tencent-connect/dsh-qqbot@0.5.5-local.1`，`link:` 安装），
-> 独立 `dsh-qqbot-ext` bundle 已移除。本 README 的独立安装流程（install.mjs）仅适用于
-> 其他机器/profile；本机维护、安装与上游合并见 [`tools/LOCAL-QQBOT.md`](tools/LOCAL-QQBOT.md)。
-> 功能源码仍在本目录，`vendor/dsh-qqbot/ext/` 由 `tools/integrate-qqbot.mjs` 生成。
+> 功能按域拆成**独立插件组件**，在 DSH 插件页逐个显示、逐个开关（与 mnemon 记忆系统同构）。
+> 本目录 `dsh-qqbot-ext/` 是功能源码，`vendor/dsh-qqbot/ext/` 由 `tools/integrate-qqbot.mjs`
+> 生成（逐字节一致）。本机维护、安装与上游合并见 [`tools/LOCAL-QQBOT.md`](tools/LOCAL-QQBOT.md)。
+> 下面的独立安装流程（install.mjs）仅适用于其他机器/profile 的遗留方式。
 
-挂在官方 [`@tencent-connect/dsh-qqbot`](https://www.npmjs.com/package/@tencent-connect/dsh-qqbot) 的标准扩展点上，
-不改上游源码就能加自己的工具、提示词段、Web 配置页和 Agent 预设。
+挂在官方 [`@tencent-connect/dsh-qqbot`](https://www.npmjs.com/package/@tencent-connect/dsh-qqbot)
+的标准扩展点上。零依赖、免构建：不 import 任何 `@deepseek-ai/*` 内部包，纯对象注册。
 
-零依赖、免构建：不 import 任何 `@deepseek-ai/*` 内部包，纯对象注册。
+## 组件结构（统一包）
+
+| 组件 | 内容 |
+| --- | --- |
+| `im-qqbot` | 官方收发主插件（上游原样） |
+| `ext-sticker` | 表情图库：自动收集 + 检索/发送 + 后台判断 + 图片理解 + 暂存整理 |
+| `ext-roleplay` | 人物扮演：人设卡注入、切换自动轮换会话 |
+| `ext-bilibili` | B站视频只读浏览 + 分享卡片按需取链 |
+| `ext-routes` | Web 配置页的本地路由（`/qqbot-ext/*`） |
+
+每个组件有自己的 GUI 标题/简介与开关；网关服务一律惰性 `ctx.get`，网关未绑定时组件照常加载。
+**Agent 预设已移除**——核心功能全是全局组件，不依赖预设；原预设独有的暂存整理工具与提示词段
+并入 `ext-sticker` 全局生效。上游 `lib/index.js` 保持原样，对上游的改动只有 5 个接缝文件
+（见 [`tools/PATCHES.md`](tools/PATCHES.md)）。
 
 ## 主要功能
 
@@ -19,106 +33,85 @@
 
 自动把群友发的 QQ 表情收进本地图库，之后可以自己发出去。
 
-- **两种收集方式**
-  - **全收**：过了过滤条件（大小、尺寸、长宽比、格式）直接入图库
-  - **模型判断**：先落暂存区，看过图觉得有意思才收进图库
-- **后台自动判断**：配好视觉模型后，新表情自动排队交给模型逐张看，
-  按你写的判定提示词决定收还是丢。**审美标准不写死在代码里**，全在提示词里，
-  接人格/人设模块只改那段文字即可
-- **视觉模型自动探测**：从宿主 `llm` 服务读出已注册的 provider 和模型，
-  只把声明了图片输入的列进下拉框，不用手抄 model id
-- **Web 配置页**：图库路径（带系统目录选择器和「打开目录」）、阈值、收集方式、
-  判定提示词全都能在面板里改，保存即生效不用重启
-- 同一张图按 SHA-256 去重；图库有张数上限
+- **两种收集方式**：全收（过过滤条件直接入库）／模型判断（先落暂存区，看过才收）
+- **后台自动判断**：配好视觉模型后新表情排队逐张看，按你写的判定提示词决定收丢；审美标准全在提示词里
+- **视觉模型自动探测**：从宿主 `llm` 服务读已注册模型，只列声明图片输入的，不用手抄 model id
+- **检索发送**：按图中文字/情绪/场景搜表情，带同图冷却与连续发送间隔
+- **Web 配置页**：图库路径、阈值、收集方式、判定提示词面板里改，总开关实时生效
+- SHA-256 去重、张数上限
 
-### 工具
+### 人物扮演
+
+导入/编辑人设卡（原生 JSON 与 Tavern v1/v2/v3），设默认角色或按群/私聊绑定；
+「启用角色扮演」总开关实时生效；切换开关或角色卡时自动轮换受影响会话，旧人设历史不残留。
+
+### B站视频浏览
+
+只读读取标题/UP主/简介/分P/公开字幕/热评/弹幕；支持链接、BV/av 号、整条分享卡片；
+卡片链接按需读取（不默认展开 raw）；搜索候选需确认。不做画面/语音识别，登录限制如实标注。
+
+### 错误拦截 + 熔断
+
+模型回合出错给原会话友好短提示（可配/留空静默），技术详情转发管理员私聊；
+连续错误自动熔断停发，**无冷却不自动恢复**，仅管理员 `/resume` 人工合闸（`/resume status` 查状态）。
+
+## 工具
 
 | 工具 | 作用 |
 | --- | --- |
 | `qq_list_stickers` | 列出图库里的表情 |
+| `qq_search_stickers` | 按文字/情绪/场景搜表情 |
 | `qq_send_sticker` | 把图库里某张表情发到当前会话 |
 | `qq_sticker_status` | 看收集开关、模式、张数和统计 |
 | `qq_sticker_pending` | 列出暂存区里等判断的表情 |
 | `qq_sticker_keep` | 把暂存的表情收进图库 |
 | `qq_sticker_drop` | 丢掉暂存的表情 |
+| `qq_card_video_links` | 按需读取当前会话分享卡片的 B站链接 |
+| `qq_video_read` | 只读浏览 B站视频元信息/字幕/热评/弹幕 |
+| `qq_video_search` | 搜索 B站视频候选 |
 
-## 安装
+## 安装（统一包，本机）
 
-### 一键安装（推荐）
+```bash
+# vendor 需自带依赖（link: 不装依赖）：用 DSH 自带 pnpm 11 + 工作区 store
+node <dsh-runtimes>/dependencies/pnpm/bin/pnpm.cjs install --prod --ignore-scripts --store-dir <repo>/.pnpm-store
+# 替换安装：先 remove_bundle 再 install_bundle 裸目录，然后重启 DSH
+```
+
+详见 [`tools/LOCAL-QQBOT.md`](tools/LOCAL-QQBOT.md)。**禁用 `file:` 协议**（pnpm 11 hoisted 会搬空 vendor 源码）。
+
+## 安装（独立 bundle，遗留方式）
 
 ```bash
 git clone git@github.com:ZhangWeiJun00/dsh-qqbot-ext.git
 cd dsh-qqbot-ext
-
 node install.mjs --dry-run   # 先看看它会做什么
 node install.mjs             # 真正安装
 ```
 
-脚本会自动完成这些事：
+自动找 profile、加依赖/bundle、跑 `pnpm install`、给上游打表情收集补丁；幂等。
+常用参数：`--profile <目录>`、`--no-patch`、`--dry-run`。之后重启 DSH。
 
-1. 找到你的 DSH profile 目录（扫 `~/.dsh/profiles/*`，多个时默认 desktop）
-2. 往 profile 的 `package.json` 加依赖和 bundle（改前备份为 `package.json.qqbot-ext-backup`）
-3. 在 profile 里跑 `pnpm install`
-4. 给上游 `dsh-qqbot` 打表情收集补丁
-
-之后重启 DSH 即可。
-
-常用参数：
-
-| 参数 | 作用 |
-| --- | --- |
-| `--profile <目录>` | 指定 profile，不自动探测 |
-| `--no-patch` | 不打上游补丁（图库能发不能自动收） |
-| `--dry-run` | 只报告，不改任何文件 |
-
-脚本是幂等的，重复运行不会重复加依赖或叠加补丁。卸载就是把 `dependencies`
-和 `dsh.profile.bundles` 里的 `dsh-qqbot-ext` 删掉再 `pnpm install`。
-
-### 手动安装
-
-1. 编辑 profile 目录的 `package.json`（默认 `~/.dsh/profiles/desktop`）：
-   - `dependencies` 加 `"dsh-qqbot-ext": "file:<本仓库 dsh-qqbot-ext 目录的绝对路径>"`
-   - `dsh.profile.bundles` 数组加 `"dsh-qqbot-ext"`
-2. 在该 profile 目录跑 `pnpm install`
-3. 重启 DSH
-
-细节与目录结构见 [`dsh-qqbot-ext/README.md`](dsh-qqbot-ext/README.md)。
-
-> **注意**：表情包的**收集**需要给上游 `dsh-qqbot` 打一个入站接缝补丁——
-> 在 `contentSanitizer` 之后、`concurrencyGuard` 之前插一个钩子。
-> 不打补丁的话图库、发送、面板都能用，但不会自动收新表情。
-> 原因见 [`tools/PATCHES.md`](tools/PATCHES.md)。
-
-## 打补丁（可选）
-
-`install.mjs` 默认会自动打。也可以单独跑：
-
-```bash
-# 默认改 ~/.dsh/profiles/desktop；别的 profile 用 --profile 指定
-node tools/apply-qqbot-sticker-collector-patch.mjs --profile ~/.dsh/profiles/myprofile
-```
-
-脚本是幂等的，重复运行只会把已有块替换成最新版，不会叠加。
-**上游插件升级/重装会覆盖这些文件，需要重跑。**
+> 表情**收集**需要给上游 `dsh-qqbot` 打入站接缝钩子（`contentSanitizer` 后、`concurrencyGuard` 前）。
+> 不打补丁则图库/发送/面板可用但不自动收。见 [`tools/PATCHES.md`](tools/PATCHES.md)。
 
 ## 自检
 
 ```bash
-node tools/verify-qqbot-ext-panel.mjs
+node tools/verify-qqbot-ext-panel.mjs        # 面板 53 项
+node --experimental-vm-modules tools/test-integrated-qqbot.mjs   # 统一包接线/组件
 ```
 
-53 项检查，覆盖面板渲染、配置接口、视觉模型探测、打开目录的安全边界、
-表情收集与去重、暂存区生命周期、判定提示词解析等。
+另有 sticker/roleplay/error-guard/归档轮换/card-links/bilibili 等隔离测试套件。
+面板脚本读写真实 `~/.dsh-qqbot-ext/config.json`，开头备份、结尾逐字节还原。
 
-脚本会读写真实的 `~/.dsh-qqbot-ext/config.json`（配置读写本来就该测真的），
-所以它开头备份、结尾逐字节还原，断言失败也会走还原钩子。
+## 上游合并
 
-## 关于补丁的取舍
-
-为什么不 fork 上游：`dsh-qqbot` 还在频繁更新，fork 之后每次同步都是场灾难。
-所以功能全部放在本扩展里，只有**躲不开的内部接缝**才打最小补丁，
-补丁内容以完整文件形式存在 `tools/patched-files/`，便于审阅和重放。
+取 pristine 新版 → `tools/integrate-qqbot.mjs` 重放（组件行/导出/locale 自动生成、接缝补丁、
+客户端单注册合并）→ provision 依赖 → 全套测试 + 对上游 5 文件 diff → remove/install → 重启验收。
+不直接覆盖 vendor，保留 MIT LICENSE 与上游来源。详见 [`tools/LOCAL-QQBOT.md`](tools/LOCAL-QQBOT.md)。
 
 ## License
 
-[MIT](LICENSE)
+[MIT](LICENSE)。上游 `@tencent-connect/dsh-qqbot`  likewise MIT，来源与版本见
+[`vendor/dsh-qqbot/LOCAL-MAINTENANCE.md`](vendor/dsh-qqbot/LOCAL-MAINTENANCE.md)。
