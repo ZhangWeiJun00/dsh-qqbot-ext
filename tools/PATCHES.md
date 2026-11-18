@@ -8,6 +8,16 @@
 
 安装与验收结果、上游合并流程见 [`LOCAL-QQBOT.md`](LOCAL-QQBOT.md) 与包内 `LOCAL-MAINTENANCE.md`。配置路径 `~/.dsh-qqbot-ext`、`/qqbot-ext/*` 路由、`qqbot-ext` 预设 ID 与 raw 按需读取契约均不变；旧独立 `dsh-qqbot-ext` bundle 已从 profile 移除。
 
+## 2026-11-18：修复 qqbot-ext 预设组件漂移（私聊会话创建抛异常的根因）
+
+**现象**：私聊回「⚠️ 处理消息时出现异常，请稍后重试。」（handleInbound 兜底），群聊正常；新会话日志只有 header、无回合。熔断正常（/resume status 无跳闸）。
+
+**根因**：preset-plugins.js 的标准行复刻自 dsh 0.2.1-rc.2，DSH 升 0.2.2-rc.3 后两处漂移：`@deepseek-ai/dsh-tool-subagent-control/list-agents` 子路径导出已删除（挂载即抛 ERR_PACKAGE_PATH_NOT_EXPORTED）；`modelSelectionSettings` 改名 `modelSelection`/`modelDiscovery`。私聊绑 qqbot-ext 预设 → composePreset 的 setup（presets.mount）抛错 → resume 失败且会话已在盘上不允许重建 → getOrCreate 抛 → 兜底文案。群聊用宿主默认预设（当前标准）不受影响。**与归档轮换无关**（归档判定代码群/私聊同路，已核宿主 archived-session-gate 源码）。
+
+**修复**：按 0.2.2-rc.3 standard.patch.yml 重新对齐标准行——删 list-agents 行；subagent spawn 改 modelSelection/modelDiscovery:true；subagent-control 加 interrupt:false；tool-fs 加 applyPatch:false；补 tool-office；skill-filesystem 的 customSkillDirs 用 createRequire 安全解析（解析不到省略）。升级 DSH 后必须重新核对复刻（已写入注释与 LOCAL-QQBOT 合并流程）。
+
+**验证**：test-integrated 增加漂移回归断言（无 list-agents/modelSelectionSettings、有 modelDiscovery）；全套隔离测试过；ext 双向同步（仅预设名替换差异）。需重启 DSH；重启后私聊 resume 现存会话会挂载修好的预设，应直接恢复。
+
 ## 2026-11-17：移除示例工具组件（ext-tools / ext_now）
 
 **需求**：用户表示示例工具功能不再需要。

@@ -109,6 +109,6 @@
 
 1. 将新上游版本取到独立的新目录（`npm pack @tencent-connect/dsh-qqbot@<版本>`，沙箱下加 `--cache <工作区目录>`），保留当前可用维护副本。先比较上游版本差异，再比较本地补丁；不要直接覆盖当前 `vendor/dsh-qqbot`。
 2. 在新副本上跑 `node tools/integrate-qqbot.mjs`（脚本拒绝已集成副本、校验上游锚点；锚点变了先修脚本差异，不把手工残缺结果当成集成成功）。脚本恢复 `ext/`、`lib/` 加载点、客户端拼接、bundle patch、导出、locale meta、本地 `pnpm-workspace.yaml` 设置与版本号，并重放归档轮换（patch-archived-rotation.mjs）与错误拦截/熔断（patch-error-guard.mjs）。
-3. 按上节 provision 依赖；运行全部隔离测试；`lib/` 对 pristine 上游 diff 应只有五个集成文件。核对原配置路径、`/qqbot-ext/*` 路由与预设 ID 无重复加载。
+3. 按上节 provision 依赖；运行全部隔离测试；`lib/` 对 pristine 上游 diff 应只有五个集成文件。核对原配置路径、`/qqbot-ext/*` 路由与预设 ID 无重复加载。**升级 DSH 后必须按新版 `@deepseek-ai/dsh-web-app/presets/standard.patch.yml` 重新核对 `ext/lib/preset-plugins.js` 的标准行复刻**（0.2.1→0.2.2 曾因 list-agents 子路径导出删除/配置改名导致 qqbot-ext 预设挂载抛错、私聊会话创建失败）。
 4. 验证通过后才更新维护目标：`remove_bundle` 旧安装 → `install_bundle` 裸目录（link:）。按 receipt 执行重启或其他后续步骤，再检查实际运行结果。
 5. 保留更新前的维护副本、集成脚本及配置备份，以便问题复现与回退。维护记录区分“文件已修改”“验证通过”“安装完成”和“运行验收通过”。

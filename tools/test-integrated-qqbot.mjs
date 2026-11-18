@@ -11,6 +11,11 @@ assert.equal(pkg.version, '0.5.5-local.1')
 assert.ok(pkg.exports['./ext-agent'])
 const preset = await text('ext/lib/preset-plugins.js')
 assert.ok(preset.includes("name: '@tencent-connect/dsh-qqbot/ext-agent'"))
+// 预设标准行必须跟当前 DSH 对齐：0.2.1 的 list-agents 子路径导出已不存在、modelSelectionSettings 已改名，
+// 漂移会让 qqbot-ext 预设挂载抛错（私聊 getOrCreate 炸、群聊默认预设不受影响）。
+assert.ok(!preset.includes('list-agents'), 'broken 0.2.1 subpath export removed from preset')
+assert.ok(!preset.includes('modelSelectionSettings'), 'renamed subagent config key removed')
+assert.ok(preset.includes('modelDiscovery: true'), 'current subagent modelDiscovery config present')
 const index = await text('lib/index.js')
 assert.ok(!index.includes('applyExtensions'), 'lib/index.js stays pristine (features load as independent component rows)')
 assert.ok(index.includes("export const inject = ['agents'];"))

@@ -1,12 +1,25 @@
 // qqbot-ext 预设的组件清单。
 //
 // 前半段是 @deepseek-ai/dsh-web-app/presets/standard.patch.yml 的逐行复刻
-// （dsh 0.2.1-rc.2，2026-11）—— 千万别删标准行：
+// （dsh 0.2.2-rc.3，2026-11；升级 DSH 后必须重新核对复刻，组件漂移会让预设挂载炸掉）——
+// 千万别删标准行：
 // 预设是「整体替换」语义，只写增量会把 bash/pwsh/工具箱全丢掉。
 // 后半段追加本扩展自己的组件行。
 //
 // 加自定义组件：往这里加一行 { id, name, config? }，
 // 或者干脆整行换成 dsh-qqbot-ext/agent（它自动扫 features/agent/*）。
+import { createRequire } from 'node:module'
+import { dirname, join } from 'node:path'
+
+// 标准预设给 skill-filesystem 挂内置技能目录；从 vendor 上下文解析不到就省略（不影响挂载）。
+let standardSkillDirs
+try {
+  const req = createRequire(import.meta.url)
+  standardSkillDirs = [join(dirname(req.resolve('@deepseek-ai/dsh-agent-preset/package.json')), 'skills')]
+} catch {
+  standardSkillDirs = undefined
+}
+
 const isWin = process.platform === 'win32'
 
 export const PRESET_PLUGINS = [
@@ -33,7 +46,7 @@ export const PRESET_PLUGINS = [
     name: '@deepseek-ai/dsh-tool-pwsh',
     disabled: !isWin,
   },
-  { id: 'tool-fs', name: '@deepseek-ai/dsh-tool-fs' },
+  { id: 'tool-fs', name: '@deepseek-ai/dsh-tool-fs', config: { applyPatch: false } },
   {
     id: 'tool-fs-search',
     name: '@deepseek-ai/dsh-tool-fs-search',
@@ -41,7 +54,11 @@ export const PRESET_PLUGINS = [
   },
   { id: 'tool-jobs', name: '@deepseek-ai/dsh-tool-jobs' },
   { id: 'tool-schedule', name: '@deepseek-ai/dsh-tool-schedule' },
-  { id: 'skill-filesystem', name: '@deepseek-ai/dsh-skill-filesystem' },
+  {
+    id: 'skill-filesystem',
+    name: '@deepseek-ai/dsh-skill-filesystem',
+    ...(standardSkillDirs ? { config: { customSkillDirs: standardSkillDirs } } : {}),
+  },
   { id: 'tool-skill', name: '@deepseek-ai/dsh-tool-skill' },
   { id: 'command-goal', name: '@deepseek-ai/dsh-command-goal' },
   { id: 'tool-goal', name: '@deepseek-ai/dsh-tool-goal' },
@@ -94,10 +111,7 @@ When ready, call exit_plan_mode with the complete plan markdown, starting with a
       {
         id: 'tool-subagent-control',
         name: '@deepseek-ai/dsh-tool-subagent-control',
-      },
-      {
-        id: 'tool-subagent-list-agents',
-        name: '@deepseek-ai/dsh-tool-subagent-control/list-agents',
+        config: { interrupt: false },
       },
       {
         id: 'tool-subagent',
@@ -105,7 +119,8 @@ When ready, call exit_plan_mode with the complete plan markdown, starting with a
         config: {
           provider: 'spawn',
           toolName: 'subagent',
-          modelSelectionSettings: true,
+          modelSelection: true,
+          modelDiscovery: true,
         },
       },
       {
@@ -133,6 +148,7 @@ When ready, call exit_plan_mode with the complete plan markdown, starting with a
     config: { fetch: true, searchTimeoutMs: 60000 },
   },
   { id: 'present', name: '@deepseek-ai/dsh-tool-present' },
+  { id: 'tool-office', name: '@deepseek-ai/dsh-tool-office' },
   {
     id: 'tool-plugin-manager',
     name: '@deepseek-ai/dsh-plugin-manager/tools',
