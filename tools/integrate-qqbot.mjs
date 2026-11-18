@@ -110,3 +110,5 @@ pnpm-workspace.yaml sets nodeLinker: hoisted (isolated layout breaks ESM sibling
 6. Verify: im-qqbot fiber active, /qqbot/im-qqbot/bind bound, /qqbot-ext/config returns the existing ~/.dsh-qqbot-ext config; follow the install receipt for restart or other next steps.
 `)
 console.log('Integrated local QQ distribution:', target)
+// 根目录同步生成可安装清单，使 bare GitHub 地址（无需 #path:）也能安装。
+await import('./make-root-package.mjs')

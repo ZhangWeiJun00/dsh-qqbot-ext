@@ -1,0 +1,113 @@
+{
+  "name": "@tencent-connect/dsh-qqbot",
+  "version": "0.5.5-local.1",
+  "description": "QQ机器人本地维护版：官方收发、人设卡、表情图库与图片理解、B站按需卡片读取，一包装载。（仓库根即安装包，运行时文件在 vendor/dsh-qqbot）",
+  "icon": "vendor/dsh-qqbot/assets/icons/qq_logo.svg",
+  "type": "module",
+  "main": "vendor/dsh-qqbot/lib/index.js",
+  "types": "vendor/dsh-qqbot/lib/index.d.ts",
+  "exports": {
+    ".": {
+      "types": "vendor/dsh-qqbot/lib/index.d.ts",
+      "import": "vendor/dsh-qqbot/lib/index.js"
+    },
+    "./client": {
+      "default": "vendor/dsh-qqbot/lib/client.js"
+    },
+    "./locale/*.json": "vendor/dsh-qqbot/locale/*.json",
+    "./package.json": "vendor/dsh-qqbot/package.json",
+    "./ext-routes": "vendor/dsh-qqbot/ext/lib/routes.js",
+    "./ext-sticker": "vendor/dsh-qqbot/ext/lib/plugin-sticker.js",
+    "./ext-sticker/locale/*.json": "vendor/dsh-qqbot/ext/locale/sticker/*.json",
+    "./ext-roleplay": "vendor/dsh-qqbot/ext/lib/plugin-roleplay.js",
+    "./ext-roleplay/locale/*.json": "vendor/dsh-qqbot/ext/locale/roleplay/*.json",
+    "./ext-bilibili": "vendor/dsh-qqbot/ext/lib/plugin-bilibili.js",
+    "./ext-bilibili/locale/*.json": "vendor/dsh-qqbot/ext/locale/bilibili/*.json",
+    "./ext-routes/locale/*.json": "vendor/dsh-qqbot/ext/locale/routes/*.json"
+  },
+  "scripts": {},
+  "keywords": [
+    "deepseek-harness",
+    "dsh",
+    "dsh-plugin",
+    "qqbot",
+    "qq",
+    "cordis",
+    "plugin",
+    "chatbot",
+    "im"
+  ],
+  "license": "MIT",
+  "engines": {
+    "node": ">=20.3.0"
+  },
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/ZhangWeiJun00/dsh-qqbot-ext.git"
+  },
+  "dsh": {
+    "bundle": {
+      "patch": "./cordis.patch.yml"
+    },
+    "client": {
+      "platform": "web"
+    },
+    "compatibility": {
+      "dshReleases": {
+        "0.1.0-rc.8": "compatible",
+        "0.2.0-rc.2": "compatible"
+      },
+      "note": "0.1.0-rc.8 为 CLI（dsh web）已验证：扫码/手动/解绑全流程、终端二维码与端内绑定页；0.2.0-rc.2 为 Desktop 内嵌运行时已验证：端内绑定页（settings.section 与侧栏）、HMR 重载收敛。客户端依赖 settings.section / sidebarRightTabs / sidebar.right.pane.tab 席位契约与 dsh.client 模块系统，宿主大版本升级后请重新验收席位行为。"
+    }
+  },
+  "dependencies": {
+    "@tencent-connect/qqbot-connector": "1.2.0",
+    "@tencent-connect/qqbot-nodejs": "^1.0.5",
+    "js-yaml": "^4.1.0",
+    "qrcode": "^1.5.4",
+    "yaml": "2.8.1"
+  },
+  "peerDependencies": {
+    "@deepseek-ai/cordis": ">=4.0.1",
+    "@deepseek-ai/dsh-agent": ">=0.1.0-rc.6",
+    "@deepseek-ai/dsh-llm": ">=0.1.0-rc.6",
+    "@deepseek-ai/dsh-session": ">=0.1.0-rc.6",
+    "@deepseek-ai/dsh-user-approval": ">=0.1.0-rc.6",
+    "@deepseek-ai/schemastery": ">=3.18.1",
+    "@tencent-connect/qqbot-connector": "1.2.0"
+  },
+  "peerDependenciesMeta": {
+    "@deepseek-ai/cordis": {
+      "optional": false
+    },
+    "@deepseek-ai/schemastery": {
+      "optional": false
+    },
+    "@deepseek-ai/dsh-agent": {
+      "optional": false
+    },
+    "@deepseek-ai/dsh-session": {
+      "optional": false
+    },
+    "@deepseek-ai/dsh-llm": {
+      "optional": false
+    },
+    "@deepseek-ai/dsh-user-approval": {
+      "optional": true
+    }
+  },
+  "private": true,
+  "files": [
+    "vendor/dsh-qqbot/lib",
+    "vendor/dsh-qqbot/ext",
+    "vendor/dsh-qqbot/assets",
+    "vendor/dsh-qqbot/locale",
+    "vendor/dsh-qqbot/cordis.patch.yml",
+    "vendor/dsh-qqbot/LICENSE",
+    "vendor/dsh-qqbot/README.md",
+    "vendor/dsh-qqbot/LOCAL-MAINTENANCE.md",
+    "cordis.patch.yml",
+    "README.md",
+    "LICENSE"
+  ]
+}
