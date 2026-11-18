@@ -34,5 +34,7 @@
       name: '@tencent-connect/dsh-qqbot/ext-roleplay'
     - id: dsh-qqbot-ext-bilibili
       name: '@tencent-connect/dsh-qqbot/ext-bilibili'
+    - id: dsh-qqbot-ext-memory
+      name: '@tencent-connect/dsh-qqbot/ext-memory'
     - id: dsh-qqbot-ext-routes
       name: '@tencent-connect/dsh-qqbot/ext-routes'
