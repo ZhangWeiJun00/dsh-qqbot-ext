@@ -19,23 +19,15 @@
 - 表情收集、索引、检索及发送冷却控制。
 - B站视频按需读取与 QQ 分享卡片链接提取；需要讨论视频时才读取，封面与标题不当作视频全文。
 - 扩展设置面板。
-- Mnemon QQ Source：自动投影当前 peer 的事实与成员档案、成功回合后提炼、显式记忆工具。
+- `qqbot-ext` 预设及其配套组件。
 
-兼容已有数据与引用：继续使用原 `~/.dsh-qqbot-ext` 配置路径，保留 `/qqbot-ext/*` 路由。`qqbot-ext` 预设已经删除，功能全局组件化。
-
-### ext-memory 联动边界
-
-`ext-memory` 需要 `mnemonMemory` 服务；通过公开 `installContributions` 注册 Source + default-three-tier 的 selection 扩展，QQ View 只选择 QQ 来源。与已有 selection/scoped 扩展冲突时由 Mnemon 报错，不能覆盖；非 QQ 回合保留其他支持来源，但会切换为显式选择组合。群/私聊隔离由 Agent 的官方绑定确定，不能用模型参数指定其他 peer。
-
-自动提炼每个成功回合额外调用一次会话模型，只用本轮用户文本、有原文依据的提炼才接受。`captureEnabled` 可关闭，`captureProvider`/`captureModel` 可指定模型。`writeEnabled` 是 QQ 组件独立开关，控制 QQ 工具和后台提炼；通过 Mnemon View Action 的写入还受到 Mnemon 总写策略限制。QQ 独立写入口不受 Mnemon 总开关代管。
-
-数据在 `~/.dsh-qqbot-ext/memory.json`，以自定义 Source 形式进入 Mnemon，不镜像到既有 Native/OpenViking 空间。仅支持同一进程串行写；同目录临时文件+原子rename，损坏库拒绝覆盖。新增测试 memory-store（13组）、memory-link、mnemon-qq-source。真实 Core smoke 需要 DSH loader 的 peer 解析，普通 Node 目前缺 cordis；重启后的实际QQ/Mnemon View尚待验收。
+兼容已有数据与引用：继续使用原 `~/.dsh-qqbot-ext` 配置路径，保留 `/qqbot-ext/*` 路由与原有预设 ID（包括 `qqbot-ext`）。不要因统一包名重置配置、改变数据目录或另造预设 ID。
 
 旧独立 `dsh-qqbot-ext` bundle 已从 profile 移除（依赖与 bundle 条目均删除，`plugin_manager remove_bundle dsh-qqbot-ext`，2026-11-17）。停用不等于删除原配置和图库；仓库 `dsh-qqbot-ext/` 源码保留可恢复。
 
 对上游 `lib/` 的改动只有五个文件（与 pristine 上游逐字节 diff 验证）：
 
-- `lib/index.js` **保持上游原样**。功能不再塞进 im-qqbot 的 apply：拆成独立插件组件（mnemon 同构），GUI 逐组件显示与开关——`ext-sticker`（收集+图库工具+判断+索引+暂存整理+提示）、`ext-roleplay`、`ext-bilibili`、`ext-memory`、`ext-routes`，加 im-qqbot 共 6 个组件（示例工具 ext-tools、qqbot-ext 预设均已按用户要求移除；原预设独有的暂存整理工具/提示词段并入 ext-sticker 全局生效）。包装器在 `ext/lib/plugin-*.js`，显式 import 各功能并逐个 try/catch（沿用 loadFeatures 隔离语义）；网关服务一律惰性 ctx.get，不硬 inject（Cordis 事件总线按名字全局派发，无 thisArg 过滤器，跨插件可达——已核 cordis 4.1.0 src/events.ts `_resolve`）。子路径插件的 GUI 标题走各自 `./ext-<comp>/locale/*.json` 导出（host-plugin.md：子路径插件不读 package.json）。
+- `lib/index.js` **保持上游原样**。功能不再塞进 im-qqbot 的 apply：拆成独立插件组件（mnemon 同构），GUI 逐组件显示与开关——`ext-sticker`（收集+图库工具+判断+索引+暂存整理+提示）、`ext-roleplay`、`ext-bilibili`、`ext-routes`，加 im-qqbot 共 5 个组件（示例工具 ext-tools、qqbot-ext 预设均已按用户要求移除；原预设独有的暂存整理工具/提示词段并入 ext-sticker 全局生效）。包装器在 `ext/lib/plugin-*.js`，显式 import 各功能并逐个 try/catch（沿用 loadFeatures 隔离语义）；网关服务一律惰性 ctx.get，不硬 inject（Cordis 事件总线按名字全局派发，无 thisArg 过滤器，跨插件可达——已核 cordis 4.1.0 src/events.ts `_resolve`）。子路径插件的 GUI 标题走各自 `./ext-<comp>/locale/*.json` 导出（host-plugin.md：子路径插件不读 package.json）。
 - `lib/gateway/middleware-setup.js`：卡片消息对象引用缓存（`qqbotExtCardReader`，入站不读 raw）+ `qqbot/sticker-candidate` 事件钩子 + **熔断闸门**（均在 contentSanitizer 之后、concurrencyGuard 之前；闸门在斜杠命令/待答问题之后，熔断期间命令仍可用）。
 - `lib/gateway/bootstrap.js`：`qqbotExtStickerSender`（只接受图库文件名，`conversationKey(agent)` 会话隔离）+ `qqbotExtSessionRotator`（`knownKeys()`/`rotate(key)`，供 ext-routes 人设保存路由轮换会话；不暴露 agent/bot/任意目标）。
 - `lib/client.js`：上游客户端与扩展面板**合并为一次包名 id 的 `.load` 注册**（`tools/merge-qqbot-client.mjs`）。Web boot graph 每包只有一个条目（entry name == package name），简单拼接会产生第二个 `id:'dsh-qqbot-ext'` 注册——没有 boot 条目、永不激活，面板不显示（2026-11-17 实测踩坑）。合并方式：捕获两份注册对象，单 factory 依次执行上游/扩展 factory，inject 并集，apply 串联、cleanup 逆序。

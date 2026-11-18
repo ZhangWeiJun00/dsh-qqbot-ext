@@ -23,9 +23,7 @@
     "./ext-roleplay/locale/*.json": "./ext/locale/roleplay/*.json",
     "./ext-bilibili": "./ext/lib/plugin-bilibili.js",
     "./ext-bilibili/locale/*.json": "./ext/locale/bilibili/*.json",
-    "./ext-routes/locale/*.json": "./ext/locale/routes/*.json",
-    "./ext-memory": "./ext/lib/plugin-memory.js",
-    "./ext-memory/locale/*.json": "./ext/locale/memory/*.json"
+    "./ext-routes/locale/*.json": "./ext/locale/routes/*.json"
   },
   "scripts": {
     "build": "tsc && tsdown --config tsdown.client.config.ts",

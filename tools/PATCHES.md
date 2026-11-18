@@ -1,13 +1,5 @@
 # 上游补丁说明
 
-## 2026-11-18：ext-memory 与 Mnemon QQ Source
-
-新增 memory-store（串行事务/原子写/CAS/损坏拒绝）、mnemon-qq-source（公开 dsh-mnemon/v1 Source + selection）、memory-capture（成功回合后本轮用户文本提炼）、qq_member_note / qq_remember。官方 Agent 绑定确定 peer；不读取 message.raw。Source 的检索和 Action 提供精确快照与提交回执；QQ View只选本 peer 来源，不混桌面全局记忆。当前只针对 default-three-tier；selection唯一槽冲突时不能一起启用另一 scoped/selection 增强。非QQ仍保留其他支持来源，但使用显式选择组合。
-
-组件独立 writeEnabled 控制所有 QQ 直写入口，captureEnabled 控制后台额外模型调用；Mnemon View Action另受 Mnemon 全局写策略。数据由 QQ Source 所有，不自动镜像到已有 Native/OpenViking 空间。单进程持久化，不支持多个 DSH 同写一文件。
-
-验证：memory-store 13组、memory-link真实临时库工具及回合自动提炼、Source隔离/权限/CAS/回执、原有功能回归通过。真实installed Core smoke普通Node因缺 @deepseek-ai/cordis peer未运行成功；公开SDK shape校验通过，重启后的真实QQ与Mnemon View待验收。新增源文件、vendor副本、根manifest/patch均同步。
-
 ## 2026-11-17：整合进本地维护版发行包（取代 node_modules 重放补丁）
 
 官方 `@tencent-connect/dsh-qqbot` 的本地维护副本 `vendor/dsh-qqbot`（`0.5.5-local.1`）已把扩展功能与全部上游接缝整合进包内：`ext/` 功能模块、`lib/index.js` 的 `applyExtensions`、`lib/gateway/middleware-setup.js` 的卡片引用缓存与 `qqbot/sticker-candidate` 钩子、`lib/gateway/bootstrap.js` 的 `qqbotExtStickerSender`、`lib/client.js` 面板合并（单次包名 id 注册，见 `tools/merge-qqbot-client.mjs`；简单拼接第二个 `.load` 会因 boot graph 每包一条目而永不激活）、bundle patch 的 routes/preset 行。**profile 不再需要对本包跑 `apply-qqbot-*-patch.mjs` 重放脚本**；那些脚本仍保留，供尚未整合的 pristine 上游副本使用。

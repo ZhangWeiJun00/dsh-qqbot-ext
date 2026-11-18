@@ -23,9 +23,7 @@
     "./ext-roleplay/locale/*.json": "vendor/dsh-qqbot/ext/locale/roleplay/*.json",
     "./ext-bilibili": "vendor/dsh-qqbot/ext/lib/plugin-bilibili.js",
     "./ext-bilibili/locale/*.json": "vendor/dsh-qqbot/ext/locale/bilibili/*.json",
-    "./ext-routes/locale/*.json": "vendor/dsh-qqbot/ext/locale/routes/*.json",
-    "./ext-memory": "vendor/dsh-qqbot/ext/lib/plugin-memory.js",
-    "./ext-memory/locale/*.json": "vendor/dsh-qqbot/ext/locale/memory/*.json"
+    "./ext-routes/locale/*.json": "vendor/dsh-qqbot/ext/locale/routes/*.json"
   },
   "scripts": {},
   "keywords": [

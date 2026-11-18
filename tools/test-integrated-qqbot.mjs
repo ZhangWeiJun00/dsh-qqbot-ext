@@ -16,7 +16,7 @@ assert.ok(!index.includes('applyExtensions'), 'lib/index.js stays pristine (feat
 assert.ok(index.includes("export const inject = ['agents'];"))
 const patch = await text('cordis.patch.yml')
 assert.ok(!patch.includes("name: 'dsh-qqbot-ext'"))
-for (const comp of ['sticker', 'roleplay', 'bilibili', 'memory', 'routes']) {
+for (const comp of ['sticker', 'roleplay', 'bilibili', 'routes']) {
   assert.ok(patch.includes(`name: '@tencent-connect/dsh-qqbot/ext-${comp}'`), 'component row ' + comp)
   assert.ok(pkg.exports[`./ext-${comp}`], 'runtime export ' + comp)
   assert.ok(pkg.exports[`./ext-${comp}/locale/*.json`], 'locale export ' + comp)
@@ -86,8 +86,6 @@ assert.ok(slashCommands.some(cmd => (Array.isArray(cmd.name) ? cmd.name : [cmd.n
 const stickerPlugin = await import('../vendor/dsh-qqbot/ext/lib/plugin-sticker.js')
 const roleplayPlugin = await import('../vendor/dsh-qqbot/ext/lib/plugin-roleplay.js')
 const bilibiliPlugin = await import('../vendor/dsh-qqbot/ext/lib/plugin-bilibili.js')
-const { register: registerMemory } = await import('../vendor/dsh-qqbot/ext/features/host/07-memory-link.js')
-assert.ok((await text('ext/lib/plugin-memory.js')).includes("['tools', 'mnemonMemory', 'agents']"))
 function componentCtx() {
   const s = new Map(), t = new Map(), l = [], sec = []
   return { s, t, l, sec, ctx: { provide: (n, v) => s.set(n, v), get: n => s.get(n), on: (n) => l.push(n), emit: async () => {}, effect: (fn) => { fn(); return () => {} }, tools: { register: (tool) => t.set(tool.name, tool) }, systemPrompt: { section: (x) => sec.push(x.name) }, logger: console } }
@@ -107,13 +105,6 @@ assert.ok(rc.l.includes('system-prompt/assemble'), 'roleplay component hooks pro
 const bc = componentCtx()
 await bilibiliPlugin.apply(bc.ctx)
 for (const n of ['qq_video_read', 'qq_video_search', 'qq_card_video_links']) assert.ok(bc.t.has(n), 'bilibili tool ' + n)
-const mc = componentCtx()
-let installedMemory
-mc.ctx.mnemonMemory = { installContributions(c) { installedMemory = c; return () => {} } }
-registerMemory(mc.ctx)
-for (const n of ['qq_member_note', 'qq_remember']) assert.ok(mc.t.has(n), 'memory tool ' + n)
-assert.equal(installedMemory.sources[0].manifest.typeId, 'qq-peer-memory')
-assert.ok(mc.l.includes('session/event'), 'memory component observes completed turns for extraction')
 assert.ok((await text('LICENSE')).includes('MIT'))
 // Merged client bundle: the boot graph has one entry per package, so both factories
 // must register under the package id in a single .load; verify slots from both land.
