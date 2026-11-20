@@ -3,7 +3,7 @@
 // 全部传 cfg 与假 sendTo，不触碰真实配置、图库或 QQ。
 import assert from 'node:assert/strict'
 import { interceptTurnError, noteTurnSuccess, breakerGate, breakerState, manualResetBreaker, breakerStatus, breakerCommand, adminOnlyAuth, _resetErrorGuard } from '../dsh-qqbot-ext/lib/error-guard.js'
-import { CONFIG_DEFAULTS, normalizeConfig } from '../dsh-qqbot-ext/lib/config.js'
+import { CONFIG_DEFAULTS, normalizeConfig, decodeConfig, resolveAdminOpenid } from '../dsh-qqbot-ext/lib/config.js'
 
 let passed = 0
 const ok = (name) => { passed += 1; console.log(`  ✓ ${name}`) }
@@ -29,7 +29,7 @@ const gate = (sendTo, key = 'qqbot:app:group:g1', peerId = 'g1', now = 1000000, 
 _resetErrorGuard()
 {
   const { sent, sendTo } = recorder()
-  const result = await err(sendTo, { errorForwardOpenid: 'boss' })
+  const result = await err(sendTo, { adminOpenid: 'boss' })
   assert.equal(result.guarded, true)
   assert.equal(sent.length, 2)
   assert.deepEqual(sent[0].target, { scope: 'c2c', targetId: 'boss' })
@@ -44,7 +44,7 @@ _resetErrorGuard()
 _resetErrorGuard()
 {
   const { sent, sendTo } = recorder()
-  await err(sendTo, { errorForwardOpenid: '' })
+  await err(sendTo, { adminOpenid: '' })
   assert.deepEqual(sent[0].target, { scope: 'c2c', targetId: 'admin' })
   ok('empty admin openid falls back to the first c2cAllow entry')
 }
@@ -148,7 +148,7 @@ _resetErrorGuard()
 _resetErrorGuard()
 {
   const { sent, sendTo } = recorder({ failAdmin: true })
-  const result = await err(sendTo, { errorForwardOpenid: 'admin' })
+  const result = await err(sendTo, { adminOpenid: 'admin' })
   assert.equal(result.guarded, true)
   assert.ok(sent.some((m) => m.target.scope === 'group'), 'chat notice still delivered')
   ok('admin forward failure does not break the chat notice')
@@ -156,14 +156,25 @@ _resetErrorGuard()
 
 // 11. 配置校验
 {
-  const next = normalizeConfig({ errorGuardEnabled: false, errorNoticeText: '忙', errorForwardOpenid: 'ABC_123-x', breakerThreshold: 5 }, CONFIG_DEFAULTS)
+  const next = normalizeConfig({ errorGuardEnabled: false, errorNoticeText: '忙', adminOpenid: 'ABC_123-x', breakerThreshold: 5 }, CONFIG_DEFAULTS)
   assert.equal(next.errorGuardEnabled, false)
   assert.equal(next.breakerThreshold, 5)
   assert.throws(() => normalizeConfig({ errorGuardEnabled: 'yes' }, CONFIG_DEFAULTS), /布尔值/)
-  assert.throws(() => normalizeConfig({ errorForwardOpenid: 'bad openid!' }, CONFIG_DEFAULTS), /字母/)
+  assert.throws(() => normalizeConfig({ adminOpenid: 'bad openid!' }, CONFIG_DEFAULTS), /字母/)
   assert.throws(() => normalizeConfig({ breakerThreshold: 101 }, CONFIG_DEFAULTS), /0–100/)
   assert.throws(() => normalizeConfig({ errorNoticeText: 'x'.repeat(501) }, CONFIG_DEFAULTS), /格式或长度/)
   ok('config validation accepts valid fields and rejects invalid ones')
+}
+
+{
+  const legacy = decodeConfig(JSON.stringify({ errorForwardOpenid: ' old-admin ', breakerThreshold: 9 }));
+  assert.equal(legacy.adminOpenid, 'old-admin');
+  assert.equal(legacy.breakerThreshold, 9);
+  assert.equal(Object.hasOwn(legacy, 'errorForwardOpenid'), false);
+  assert.equal(normalizeConfig({ errorForwardOpenid: 'stale' }, legacy).adminOpenid, 'old-admin');
+  const cleared = decodeConfig(JSON.stringify({ adminOpenid: '', errorForwardOpenid: 'old-admin' }));
+  assert.equal(resolveAdminOpenid(cleared, 'fallback'), 'fallback');
+  ok('legacy configuration migrates and an explicit clear takes precedence');
 }
 
 // 12. /resume 人工合闸：跳闸中立即恢复，闸门放行（无参数直接合闸，reset 参数兼容）
@@ -223,8 +234,8 @@ _resetErrorGuard()
   assert.equal(typeof auth({ message: { senderId: 'other' } }), 'string', 'other allowlisted users are denied')
   assert.match(auth({ message: { senderId: 'other' } }), /仅限管理员/)
   assert.match(auth({ message: {} }), /仅限管理员/)
-  const overridden = adminOnlyAuth({ config: official, logger: { warn() {} }, cfg: cfg({ errorForwardOpenid: 'custom' }) })
-  assert.equal(overridden({ message: { senderId: 'custom' } }), true, 'errorForwardOpenid override honored')
+  const overridden = adminOnlyAuth({ config: official, logger: { warn() {} }, cfg: cfg({ adminOpenid: 'custom' }) })
+  assert.equal(overridden({ message: { senderId: 'custom' } }), true, 'adminOpenid override honored')
   assert.match(overridden({ message: { senderId: 'boss' } }), /仅限管理员/)
   const noAdmin = adminOnlyAuth({ config: { access: { c2cAllow: [] } }, logger: { warn() {} }, cfg: cfg() })
   assert.match(noAdmin({ message: { senderId: 'boss' } }), /仅限管理员/, 'no resolvable admin → fail closed')

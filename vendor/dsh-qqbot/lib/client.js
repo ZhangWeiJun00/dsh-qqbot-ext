@@ -1135,7 +1135,8 @@ const __qqExtReg = {
       indexMaxTokens: 1200, indexTimeoutMs: 60000,
       sameStickerCooldownSeconds: 600, stickerSendIntervalSeconds: 15,
     }
-    const withIndexDefaults = (config) => config == null ? null : ({ ...INDEX_DEFAULTS, ...config })
+    const STICKER_FIELDS = ['enabled', 'collectMode', 'libraryDir', 'minBytes', 'maxBytes', 'minEdge', 'maxEdge', 'maxAspect', 'maxLibrary', 'pendingLimit', 'judgeEnabled', 'judgeProvider', 'judgeModel', 'judgePrompt', 'judgeMaxTokens', 'judgeTimeoutMs', ...Object.keys(INDEX_DEFAULTS)]
+    const withIndexDefaults = (config) => config == null ? null : Object.fromEntries(STICKER_FIELDS.map((key) => [key, config[key] ?? INDEX_DEFAULTS[key]]))
     const STYLE_ID = 'qqbot-ext-panel-styles'
     const NS = 'dsh-qqbot-ext'
     const PANEL_ID = 'qqbot-ext'
@@ -2236,10 +2237,49 @@ const __qqExtReg = {
           h('button', { type: 'submit', className: 'qbe-save', disabled: busy || !dirty }, busy ? '处理中…' : '保存全部配置')))
     }
 
-    /** 错误拦截组件：友好提示/管理员转发/熔断参数。独立读取，保存只提交本组件字段（服务端合并写入）。 */
-    function ErrorGuardSection() {
+    function GeneralSettings({ initialOpenid, inputRef }) {
+      const [saved, setSaved] = React.useState(initialOpenid)
+      const [value, setValue] = React.useState(initialOpenid)
+      const [busy, setBusy] = React.useState(false)
+      const [note, setNote] = React.useState(null)
+      const save = async (event) => {
+        event.preventDefault()
+        if (busy || value === saved) return
+        setBusy(true)
+        setNote(null)
+        try {
+          const response = await fetch(API_PATH, {
+            method: 'POST', headers: { 'content-type': 'application/json' },
+            body: JSON.stringify({ config: { adminOpenid: value } }),
+          })
+          const body = await response.json()
+          if (!response.ok || body?.ok !== true) throw new Error(body?.error ?? `保存失败（HTTP ${response.status}）`)
+          setSaved(body.config.adminOpenid)
+          setValue(body.config.adminOpenid)
+          setNote({ ok: true, text: '管理员 OpenID 已保存，立即生效。' })
+        } catch (error) {
+          setNote({ ok: false, text: `保存失败，草稿已保留。${error.message ?? error}` })
+        } finally { setBusy(false) }
+      }
+      const helpId = React.useId()
+      return h('div', { className: 'qbe-card' },
+        h('div', { className: 'qbe-cardHead' }, h('h2', null, '总配置')),
+        h('form', { className: 'qbe-form', onSubmit: save },
+          h('label', { className: 'qbe-field' },
+            h('span', { className: 'qbe-label' }, '管理员 OpenID'),
+            h('input', { className: 'qbe-input', ref: inputRef, value, disabled: busy, maxLength: 128,
+              'aria-describedby': helpId, onChange: (event) => { setValue(event.target.value); setNote(null) } }),
+            h('span', { id: helpId, className: 'qbe-hint' }, '用于接收错误与熔断通知，以及授权 /resume。留空时使用 QQ 机器人私聊白名单的首位用户。')),
+          h('div', { className: 'qbe-footer' },
+            h('p', { className: `qbe-note${note && !note.ok ? ' qbe-note--error' : ''}`, role: note && !note.ok ? 'alert' : 'status' },
+              note?.text ?? (value !== saved ? '有改动还没保存' : '配置已保存')),
+            h('button', { type: 'submit', className: 'qbe-save', disabled: busy || value === saved }, busy ? '保存中…' : '保存管理员 OpenID'))))
+    }
+
+    /** 错误拦截组件独立保存友好提示与熔断参数。 */
+    function ErrorGuardSection({ focusAdmin }) {
       const path = '/qqbot-ext/config'
-      const FIELDS = ['errorGuardEnabled', 'errorNoticeText', 'errorForwardOpenid', 'breakerThreshold']
+      const FIELDS = ['errorGuardEnabled', 'errorNoticeText', 'breakerThreshold']
       const pick = (config) => Object.fromEntries(FIELDS.map((key) => [key, config?.[key]]))
       const [form, setForm] = React.useState(null)
       const [defaults, setDefaults] = React.useState(null)
@@ -2316,9 +2356,8 @@ const __qqExtReg = {
           h(TextAreaField, { label: '友好提示正文', value: form.errorNoticeText, defaultValue: d.errorNoticeText,
             disabled: busy, onReset: resetTo('errorNoticeText'), onChange: (value) => patch('errorNoticeText', value),
             placeholder: '留空 = 出错时原会话静默', help: '熔断期间也复用这条提示（每会话 60 秒至多一条）。' }),
-          h(TextField, { label: '管理员 openid', value: form.errorForwardOpenid, defaultValue: d.errorForwardOpenid,
-            disabled: busy, onReset: resetTo('errorForwardOpenid'), onChange: (value) => patch('errorForwardOpenid', value),
-            placeholder: '留空 = 官方配置 c2c 白名单第一个', help: '错误详情与熔断跳闸/恢复通知都发到这个私聊。' }),
+          h('div', { className: 'qbe-field' },
+            h('button', { type: 'button', className: 'qbe-mini', onClick: focusAdmin }, '前往总配置设置管理员 OpenID')),
           h(NumberField, { label: '熔断阈值（连续错误回合）', value: form.breakerThreshold, defaultValue: d.breakerThreshold,
             disabled: busy, onReset: resetTo('breakerThreshold'), onChange: (value) => patch('breakerThreshold', value),
             help: '0 = 不熔断。未跳闸时成功回合清零计数；跳闸后不自动恢复，只能管理员 /resume 人工合闸。请求级瞬时重试由宿主 llm-retry 负责。' })),
@@ -2340,6 +2379,7 @@ const __qqExtReg = {
       useStyles()
       const { data, setData, error } = useExtensionData()
       const [active, setActive] = React.useState('sticker-library')
+      const adminInput = React.useRef(null)
 
       if (error !== null) {
         return h('div', { className: 'qbe-root' },
@@ -2370,6 +2410,7 @@ const __qqExtReg = {
 
       return h('div', { className: 'qbe-root' },
         overview,
+        h(GeneralSettings, { initialOpenid: data.config?.adminOpenid ?? '', inputRef: adminInput }),
         h('div', { className: 'qbe-tabs', role: 'tablist', 'aria-label': '扩展组件' },
           components.map((item) => h('button', {
             key: item.id, type: 'button', role: 'tab',
@@ -2393,7 +2434,7 @@ const __qqExtReg = {
               ? h('div', { key: 'roleplay', hidden: current.id !== 'roleplay', className: 'qbe-configPanel' }, h(RoleplaySection))
               : null,
             components.some((item) => item.id === 'error-guard')
-              ? h('div', { key: 'error-guard', hidden: current.id !== 'error-guard', className: 'qbe-configPanel' }, h(ErrorGuardSection))
+              ? h('div', { key: 'error-guard', hidden: current.id !== 'error-guard', className: 'qbe-configPanel' }, h(ErrorGuardSection, { focusAdmin: () => adminInput.current?.focus() }))
               : null))
     }
 

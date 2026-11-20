@@ -1,5 +1,9 @@
 # 上游补丁说明
 
+## 2026-11-20：管理员移至 QQ 扩展总配置
+
+总配置统一保存 `adminOpenid`，错误通知、熔断和 `/resume` 鉴权共用。旧 `errorForwardOpenid` 读取时兼容，下次保存写入新字段。留空沿用 QQ 私聊白名单首位用户。图库、错误拦截与总配置分别提交各自字段，配置保存串行合并。群聊格式告警方案也改为读取同一字段。
+
 ## 2026-11-17：整合进本地维护版发行包（取代 node_modules 重放补丁）
 
 官方 `@tencent-connect/dsh-qqbot` 的本地维护副本 `vendor/dsh-qqbot`（`0.5.5-local.1`）已把扩展功能与全部上游接缝整合进包内：`ext/` 功能模块、`lib/index.js` 的 `applyExtensions`、`lib/gateway/middleware-setup.js` 的卡片引用缓存与 `qqbot/sticker-candidate` 钩子、`lib/gateway/bootstrap.js` 的 `qqbotExtStickerSender`、`lib/client.js` 面板合并（单次包名 id 注册，见 `tools/merge-qqbot-client.mjs`；简单拼接第二个 `.load` 会因 boot graph 每包一条目而永不激活）、bundle patch 的 routes/preset 行。**profile 不再需要对本包跑 `apply-qqbot-*-patch.mjs` 重放脚本**；那些脚本仍保留，供尚未整合的 pristine 上游副本使用。

@@ -1,4 +1,4 @@
-// 表情图库配置：单一事实源（宿主工具与 Web 配置页共用）。
+// QQ 扩展配置：宿主工具与 Web 配置页共用。
 // 存 %USERPROFILE%\.dsh-qqbot-ext\config.json，改了就即时生效，不用重启。
 import { homedir } from 'node:os'
 import { basename, isAbsolute, join } from 'node:path'
@@ -38,11 +38,12 @@ export const CONFIG_DEFAULTS = {
   indexTimeoutMs: 60000,
   sameStickerCooldownSeconds: 600,
   stickerSendIntervalSeconds: 15,
+  // 总配置：各组件共享的 QQ 管理员。
+  adminOpenid: '',
   // 错误拦截与熔断（本地维护）：回合错误给原会话友好短提示、详情转发管理员；
   // 连续错误达到阈值熔断停发，无自动恢复，只能管理员 /resume 人工合闸。
   errorGuardEnabled: true,
   errorNoticeText: '服务器繁忙，等会儿再试试～',
-  errorForwardOpenid: '',
   breakerThreshold: 3,
 }
 
@@ -67,6 +68,19 @@ function toInt(value, fallback, field, min, max) {
   const rounded = Math.trunc(parsed)
   if (rounded < min || rounded > max) throw new Error(`${field} 需要在 ${min}–${max} 之间`)
   return rounded
+}
+
+function validateAdminOpenid(value) {
+  if (typeof value !== 'string' || value.length > 128) throw new Error('管理员 OpenID 格式或长度无效')
+  const trimmed = value.trim()
+  if (trimmed && !/^[A-Za-z0-9_-]+$/.test(trimmed)) throw new Error('管理员 OpenID 只能包含字母、数字、下划线和连字符')
+  return trimmed
+}
+
+/** 通知与命令鉴权共用，兼容尚未保存迁移的旧配置。 */
+export function resolveAdminOpenid(config, fallbackAdmin) {
+  const explicit = config?.adminOpenid !== undefined ? config.adminOpenid : config?.errorForwardOpenid
+  return validateAdminOpenid(explicit === undefined ? '' : explicit) || String(fallbackAdmin ?? '').trim()
 }
 
 /** 校验一份（可能是增量的）配置补丁，返回规范化后的已知字段。 */
@@ -136,14 +150,11 @@ export function normalizeConfig(patch, base) {
     if (typeof input.errorGuardEnabled !== 'boolean') throw new Error('errorGuardEnabled 必须是布尔值')
     next.errorGuardEnabled = input.errorGuardEnabled
   }
-  for (const [key, limit] of [['errorNoticeText', 500], ['errorForwardOpenid', 128]]) {
-    if (input[key] === undefined) continue
-    if (typeof input[key] !== 'string' || input[key].length > limit) throw new Error(`${key} 格式或长度无效`)
-    next[key] = input[key]
+  if (input.errorNoticeText !== undefined) {
+    if (typeof input.errorNoticeText !== 'string' || input.errorNoticeText.length > 500) throw new Error('errorNoticeText 格式或长度无效')
+    next.errorNoticeText = input.errorNoticeText
   }
-  if (next.errorForwardOpenid.trim() !== '' && !/^[A-Za-z0-9_-]+$/.test(next.errorForwardOpenid.trim())) {
-    throw new Error('errorForwardOpenid 只能包含字母、数字、下划线和连字符')
-  }
+  if (input.adminOpenid !== undefined) next.adminOpenid = validateAdminOpenid(input.adminOpenid)
   next.breakerThreshold = toInt(input.breakerThreshold, current.breakerThreshold, 'breakerThreshold', 0, 100)
   return next
 }
@@ -181,23 +192,32 @@ export function judgeReady(config) {
 /** 读磁盘配置；文件缺失或损坏时退回默认值，不抛错。 */
 export async function readConfig() {
   try {
-    const raw = await readFile(CONFIG_PATH, 'utf8')
-    const parsed = JSON.parse(raw.replace(/^\uFEFF/, ''))
-    return normalizeConfig(parsed, CONFIG_DEFAULTS)
+    return decodeConfig(await readFile(CONFIG_PATH, 'utf8'))
   } catch {
     return { ...CONFIG_DEFAULTS }
   }
 }
 
-/** 合并写入（原子替换）；校验失败抛错，磁盘不动。 */
-export async function writeConfig(patch) {
-  const current = await readConfig()
-  const next = assertWritable(normalizeConfig(patch, current))
-  await mkdir(HOME_DIR, { recursive: true })
-  const temp = `${CONFIG_PATH}.tmp`
-  await writeFile(temp, `${JSON.stringify(next, null, 2)}\n`, 'utf8')
-  await rename(temp, CONFIG_PATH)
-  return next
+export function decodeConfig(raw) {
+  const parsed = JSON.parse(raw.replace(/^\uFEFF/, ''))
+  return normalizeConfig({ ...parsed, adminOpenid: resolveAdminOpenid(parsed) })
+}
+
+let writeQueue = Promise.resolve()
+
+/** 合并写入（串行读改写，原子替换）；校验失败抛错，磁盘不动。 */
+export function writeConfig(patch) {
+  const save = writeQueue.then(async () => {
+    const current = await readConfig()
+    const next = assertWritable(normalizeConfig(patch, current))
+    await mkdir(HOME_DIR, { recursive: true })
+    const temp = `${CONFIG_PATH}.tmp`
+    await writeFile(temp, `${JSON.stringify(next, null, 2)}\n`, 'utf8')
+    await rename(temp, CONFIG_PATH)
+    return next
+  })
+  writeQueue = save.catch(() => {})
+  return save
 }
 
 /** 配置里的图库绝对路径。 */

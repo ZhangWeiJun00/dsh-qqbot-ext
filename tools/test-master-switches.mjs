@@ -8,8 +8,8 @@ import { CONFIG_DEFAULTS } from '../dsh-qqbot-ext/lib/config.js'
 
 const source = await readFile(new URL('../dsh-qqbot-ext/client.js', import.meta.url), 'utf8')
 const exposed = source
-  .replace('    /** 错误拦截组件：友好提示/管理员转发/熔断参数。独立读取，保存只提交本组件字段（服务端合并写入）。 */',
-    '    globalThis.ErrorGuardSection = ErrorGuardSection\n    /** 错误拦截组件：友好提示/管理员转发/熔断参数。独立读取，保存只提交本组件字段（服务端合并写入）。 */')
+  .replace('    function ErrorGuardSection', '    globalThis.ErrorGuardSection = ErrorGuardSection\n    function ErrorGuardSection')
+  .replace('    function GeneralSettings', '    globalThis.GeneralSettings = GeneralSettings\n    function GeneralSettings')
   .replace('    /** 表情包图库组件：唯一可编辑的组件。 */',
     '    globalThis.StickerLibrarySection = StickerLibrarySection\n    /** 表情包图库组件：唯一可编辑的组件。 */')
 assert.notEqual(exposed, source)
@@ -25,6 +25,7 @@ function harness() {
   const react = {
     createElement: (type, props, ...children) => ({ type, props: props || {}, children: children.flat(Infinity).filter((v) => v != null) }),
     Fragment: 'fragment',
+    useId: () => 'test-admin-help',
     useState(value) {
       const i = cursor++
       if (!(i in state)) state[i] = typeof value === 'function' ? value() : value
@@ -54,7 +55,8 @@ function harness() {
   vm.runInContext(exposed, context)
   let tree
   const flush = () => { while (effects.length) effects.shift()() }
-  const renderEG = () => { cursor = 0; tree = context.ErrorGuardSection(); flush(); return tree }
+  const renderEG = () => { cursor = 0; tree = context.ErrorGuardSection({}); flush(); return tree }
+  const renderGeneral = () => { cursor = 0; tree = context.GeneralSettings({ initialOpenid: 'oldAdmin' }); return tree }
   const renderSticker = () => { cursor = 0; tree = context.StickerLibrarySection({ data, setData, getWorkspace: () => undefined }); flush(); return tree }
   const settle = async (render) => { await new Promise((resolve) => setImmediate(resolve)); return render() }
   const nodes = (root = tree) => typeof root !== 'object' || root === null ? [] : [root, ...root.children.flatMap((child) => nodes(child))]
@@ -63,7 +65,7 @@ function harness() {
   const switchByLabel = (label) => find((node) => typeof node.type === 'function' && node.type.name === 'Switch' && node.props.label === label)
   const button = (label) => find((node) => node.type === 'button' && text(node) === label)
   return {
-    requests, renderEG, renderSticker, settle, nodes, text, find, switchByLabel, button,
+    requests, renderEG, renderSticker, renderGeneral, settle, nodes, text, find, switchByLabel, button,
     get data() { return data }, get serverConfig() { return serverConfig }, initialConfigRef,
     override(fn) { override = fn }, get tree() { return tree },
   }
@@ -134,4 +136,34 @@ await test('sticker toggle failure reverts and reports not effective', async () 
   assert.match(ui.text(ui.tree), /开关保存失败（未生效）/)
 })
 
-console.log(`${cases} master-switch isolation tests passed; no real requests or configuration writes`)
+await test('general settings save only the administrator and retain a failed draft', async () => {
+  const ui = harness()
+  ui.renderGeneral()
+  const change = (value) => ui.find((node) => node.type === 'input').props.onChange({ target: { value } })
+  assert.equal(ui.find((node) => node.type === 'input').props.value, 'oldAdmin')
+  change('newAdmin')
+  ui.renderGeneral()
+  await ui.find((node) => node.type === 'form').props.onSubmit({ preventDefault() {} })
+  ui.renderGeneral()
+  assert.deepEqual(ui.requests.at(-1).payload.config, { adminOpenid: 'newAdmin' })
+  assert.equal(ui.serverConfig.adminOpenid, 'newAdmin')
+  assert.equal(ui.button('保存管理员 OpenID').props.disabled, true)
+  change('bad id')
+  ui.renderGeneral()
+  ui.override(async () => ({ ok: false, status: 400, json: async () => ({ ok: false, error: '格式无效' }) }))
+  await ui.find((node) => node.type === 'form').props.onSubmit({ preventDefault() {} })
+  ui.renderGeneral()
+  assert.equal(ui.find((node) => node.type === 'input').props.value, 'bad id')
+  assert.match(ui.text(ui.tree), /保存失败，草稿已保留/)
+})
+
+await test('sticker form never submits stale administrator settings', async () => {
+  const ui = harness()
+  ui.renderSticker()
+  ui.find((node) => node.type === 'form').props.onSubmit({ preventDefault() {} })
+  await ui.settle(ui.renderSticker)
+  assert.ok(!('adminOpenid' in ui.requests.at(-1).payload.config))
+  assert.ok(!('errorGuardEnabled' in ui.requests.at(-1).payload.config))
+})
+
+console.log(`${cases} configuration UI isolation tests passed; no real requests or configuration writes`)

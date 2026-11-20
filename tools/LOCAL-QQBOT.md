@@ -53,10 +53,10 @@
   - `interceptTurnError`：详情（会话 key/时间/code/message）转发管理员 c2c → 原会话发 `errorNoticeText`（留空静默）→ 连续错误计数；达到 `breakerThreshold`（默认 3）跳闸并通知管理员。跳闸中在途错误照常上报，不重复跳闸。
   - `noteTurnSuccess`：未跳闸时清零；跳闸中不做任何事（在途成功不自动恢复）。
   - `breakerGate`：跳闸后一律返回 true 拦截入站；每会话 60s 至多发一条友好提示。**无冷却、不自动恢复**（用户明确要求），只能管理员 `/resume` 合闸。
-- 管理员 openid：`errorForwardOpenid`，留空回退官方配置 `access.c2cAllow[0]`（当前即大王）。
+- 管理员 openid：`adminOpenid`，留空回退官方配置 `access.c2cAllow[0]`（当前即大王）。
 - 接线：`outbound.js` onTurnEnd（错误→interceptTurnError；complete→noteTurnSuccess；拦截异常回退上游文案）；`middleware-setup.js` 闸门在斜杠命令/待答问题/表情钩子之后、concurrencyGuard 之前。请求级瞬时重试仍由宿主 llm-retry 负责，熔断计的是「最终失败的回合」。
 - 面板：新增「错误拦截」组件（总开关/提示正文/管理员 openid/阈值），独立读取、合并保存（只提交本组件字段，normalizeConfig 合并不丢其他配置）。
-- 人工恢复命令：`/resume` 无参数直接合闸、`/resume status` 查状态（manualResetBreaker/breakerStatus/breakerCommand；保留 /breaker 别名与 reset 参数兼容）。**仅限管理员**：adminOnlyAuth 同步判定（SDK authorized 不 await），管理员 = errorForwardOpenid 留空回退 c2cAllow[0]，解析不出管理员 fail-closed。middleware-setup 把命令 push 进 buildCommandList 的同一数组（/bot-help 闭包可见）；命令在闸门之前，跳闸期间可用。
+- 人工恢复命令：`/resume` 无参数直接合闸、`/resume status` 查状态（manualResetBreaker/breakerStatus/breakerCommand；保留 /breaker 别名与 reset 参数兼容）。**仅限管理员**：adminOnlyAuth 同步判定（SDK authorized 不 await），管理员 = adminOpenid 留空回退 c2cAllow[0]，解析不出管理员 fail-closed。middleware-setup 把命令 push 进 buildCommandList 的同一数组（/bot-help 闭包可见）；命令在闸门之前，跳闸期间可用。
 - 补丁重放：`tools/patch-error-guard.mjs`（outbound import+onTurnEnd 块、middleware import+闸门+命令注册，锚点漂移即抛错，幂等）；已接进 integrate；pristine 全链路重放与 vendor 逐字节一致。
 - 测试：`tools/test-error-guard.mjs`（15 项）、面板 53 项（含新组件渲染/25 个恢复默认按钮）、集成测试（闸门位置+/resume 注册断言）。
 - **宿主 JS 改动，需重启 DSH 生效**。

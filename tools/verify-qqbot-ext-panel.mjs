@@ -71,7 +71,7 @@ const sample = {
     { id: 'error-guard', title: '错误拦截', summary: '错误友好提示与熔断。', editable: true, toolInfo: [] },
   ],
   capabilities: { autoCollect: true, collectMode: 'auto', stickerCount: 4, stickerLimit: 300, pendingCount: 0, libraryExists: true },
-  config: { enabled: true, collectMode: 'auto', libraryDir: 'D:/x', minBytes: 1, maxBytes: 2, minEdge: 1, maxEdge: 2, maxAspect: 2, maxLibrary: 3, pendingLimit: 50, judgeEnabled: false, judgeProvider: '', judgeModel: '', judgePrompt: '', judgeMaxTokens: 200, judgeTimeoutMs: 60000, indexEnabled: false, indexProvider: '', indexModel: '', indexPrompt: '', indexMaxTokens: 1200, indexTimeoutMs: 60000, sameStickerCooldownSeconds: 600, stickerSendIntervalSeconds: 15, errorGuardEnabled: true, errorNoticeText: '服务器繁忙，等会儿再试试～', errorForwardOpenid: '', breakerThreshold: 3 },
+  config: { enabled: true, collectMode: 'auto', libraryDir: 'D:/x', minBytes: 1, maxBytes: 2, minEdge: 1, maxEdge: 2, maxAspect: 2, maxLibrary: 3, pendingLimit: 50, judgeEnabled: false, judgeProvider: '', judgeModel: '', judgePrompt: '', judgeMaxTokens: 200, judgeTimeoutMs: 60000, indexEnabled: false, indexProvider: '', indexModel: '', indexPrompt: '', indexMaxTokens: 1200, indexTimeoutMs: 60000, sameStickerCooldownSeconds: 600, stickerSendIntervalSeconds: 15, errorGuardEnabled: true, errorNoticeText: '服务器繁忙，等会儿再试试～', adminOpenid: '', breakerThreshold: 3 },
   libraryDir: 'D:/x',
   libraryExists: true,
   count: 4,
@@ -102,7 +102,7 @@ const sample = {
     stickerSendIntervalSeconds: 15,
     errorGuardEnabled: true,
     errorNoticeText: '服务器繁忙，等会儿再试试～',
-    errorForwardOpenid: '',
+    adminOpenid: '',
     breakerThreshold: 3,
   },
 }
@@ -124,6 +124,8 @@ const R = {
     return [hooks[index], (v) => { hooks[index] = typeof v === 'function' ? v(hooks[index]) : v }]
   },
   useEffect(fn) { effects.push(fn); this._i += 1 },
+  useId() { return 'test-admin-help' },
+  useRef(value) { return { current: value } },
   useCallback(fn) { this._i += 1; return fn },
 }
 const instantiate = (node) => {
@@ -190,6 +192,7 @@ assert.ok(all.includes('QQ 机器人扩展'), 'title text')
 assert.ok(all.includes('表情包图库'), 'sticker component tab')
 assert.ok(all.includes('错误拦截'), 'second component tab')
 assert.ok(!all.includes('小黄脸'), 'removed QQ face component is gone')
+assert.ok(all.includes('总配置') && all.includes('管理员 OpenID'), 'shared administrator settings rendered')
 assert.ok(all.includes('图库保存位置'), 'library path field')
 assert.ok(all.includes('图库张数'), 'overview stat')
 assert.ok(all.includes('错误拦截'), 'error-guard component tab')
@@ -207,7 +210,7 @@ const collectResets = (node) => {
 }
 collectResets(tree)
 const resetLabels = resetButtons.map((props) => props['aria-label'] ?? '')
-const expectedLabels = ['自动收集', '收集方式', '图库保存位置', '张数上限', '暂存上限', '开启后台自动判断', '视觉模型', '判定提示词', '判断输出 token 上限', '判断超时（毫秒）', '最小字节', '最大字节', '最小长边（像素）', '最大长边（像素）', '最大长宽比', '图片索引', '索引视觉模型', '索引提示词', '索引输出 token 上限', '索引超时（毫秒）', '同一张表情冷却（秒）', '表情发送间隔（秒）', '友好提示正文', '管理员 openid', '熔断阈值（连续错误回合）']
+const expectedLabels = ['自动收集', '收集方式', '图库保存位置', '张数上限', '暂存上限', '开启后台自动判断', '视觉模型', '判定提示词', '判断输出 token 上限', '判断超时（毫秒）', '最小字节', '最大字节', '最小长边（像素）', '最大长边（像素）', '最大长宽比', '图片索引', '索引视觉模型', '索引提示词', '索引输出 token 上限', '索引超时（毫秒）', '同一张表情冷却（秒）', '表情发送间隔（秒）', '友好提示正文', '熔断阈值（连续错误回合）']
 for (const label of expectedLabels) {
   assert.ok(resetLabels.includes(`恢复默认：${label}`), `missing reset button for ${label}`)
 }
@@ -634,7 +637,7 @@ assert.ok(overview.capabilities && typeof overview.capabilities.stickerCount ===
 ok('GET returns overview + component list + capabilities')
 
 // defaults 必须是完整的一份，页面每个「恢复默认」按钮才都有值可用
-const defaultKeys = ['enabled', 'collectMode', 'libraryDir', 'minBytes', 'maxBytes', 'minEdge', 'maxEdge', 'maxAspect', 'maxLibrary', 'pendingLimit', 'judgeEnabled', 'judgeProvider', 'judgeModel', 'judgePrompt', 'judgeMaxTokens', 'judgeTimeoutMs', 'indexEnabled', 'indexProvider', 'indexModel', 'indexPrompt', 'indexMaxTokens', 'indexTimeoutMs', 'sameStickerCooldownSeconds', 'stickerSendIntervalSeconds', 'errorGuardEnabled', 'errorNoticeText', 'errorForwardOpenid', 'breakerThreshold']
+const defaultKeys = ['enabled', 'collectMode', 'libraryDir', 'minBytes', 'maxBytes', 'minEdge', 'maxEdge', 'maxAspect', 'maxLibrary', 'pendingLimit', 'judgeEnabled', 'judgeProvider', 'judgeModel', 'judgePrompt', 'judgeMaxTokens', 'judgeTimeoutMs', 'indexEnabled', 'indexProvider', 'indexModel', 'indexPrompt', 'indexMaxTokens', 'indexTimeoutMs', 'sameStickerCooldownSeconds', 'stickerSendIntervalSeconds', 'errorGuardEnabled', 'errorNoticeText', 'adminOpenid', 'breakerThreshold']
 for (const key of defaultKeys) {
   assert.ok(overview.defaults && overview.defaults[key] !== undefined, `defaults.${key} missing`)
 }

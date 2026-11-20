@@ -6,7 +6,7 @@
 // 状态为模块级（单 bot 进程）；配置实时读 ~/.dsh-qqbot-ext/config.json，
 // 测试可直接传 cfg 覆盖，避免真实文件 I/O。
 import { readFileSync } from 'node:fs'
-import { CONFIG_PATH, readConfig } from './config.js'
+import { CONFIG_PATH, readConfig, decodeConfig, resolveAdminOpenid } from './config.js'
 
 const NOTICE_INTERVAL_MS = 60000
 const state = { consecutive: 0, trippedAt: 0, lastNotice: new Map() }
@@ -23,20 +23,14 @@ export function breakerState() {
   return { consecutive: state.consecutive, trippedAt: state.trippedAt }
 }
 
-function adminOpenid(cfg, fallbackAdmin) {
-  const explicit = String(cfg.errorForwardOpenid ?? '').trim()
-  return explicit || String(fallbackAdmin ?? '').trim()
-}
-
-/** 同步解析管理员 openid：errorForwardOpenid 优先，否则官方 c2c 白名单第一个。
- *  SDK 的 authorized 是同步判定（不 await），只能同步 IO；读失败回退白名单首项。 */
+// SDK 的 authorized 是同步判定。与异步通知路径使用相同的配置解码和管理员解析。
 function adminOpenidSync(config, cfg) {
+  const fallback = config?.access?.c2cAllow?.[0]
   let extCfg = cfg
   if (extCfg === undefined) {
-    try { extCfg = JSON.parse(readFileSync(CONFIG_PATH, 'utf8').replace(/^\uFEFF/, '')) } catch { extCfg = {} }
+    try { extCfg = decodeConfig(readFileSync(CONFIG_PATH, 'utf8')) } catch { extCfg = {} }
   }
-  const explicit = String(extCfg?.errorForwardOpenid ?? '').trim()
-  return explicit || String(config?.access?.c2cAllow?.[0] ?? '').trim()
+  try { return resolveAdminOpenid(extCfg, fallback) } catch { return '' }
 }
 
 /** /resume 仅限管理员：发送者必须等于管理员 openid；解析不出管理员时一律拒绝（fail-closed）。 */
@@ -51,9 +45,9 @@ export function adminOnlyAuth({ config, logger, cfg }) {
 }
 
 async function forward(sendTo, cfg, fallbackAdmin, text, logger) {
-  const openid = adminOpenid(cfg, fallbackAdmin)
-  if (!openid) return false
   try {
+    const openid = resolveAdminOpenid(cfg, fallbackAdmin)
+    if (!openid) return false
     await sendTo({ scope: 'c2c', targetId: openid }, text)
     return true
   } catch (error) {
